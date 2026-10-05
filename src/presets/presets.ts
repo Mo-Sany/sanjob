@@ -118,7 +118,9 @@ export const PRESETS: SitePreset[] = [
   },
 
   // ───────────────────────────── LinkedIn ─────────────────────────────
-  // Listing built from fixtures/linkedin/jobs-home.html (job cards link via ?currentJobId=)
+  // Listing built from fixtures/linkedin/jobs-home.html (job cards link via ?currentJobId=),
+  // fixtures/linkedin/search-results.html (new /jobs/search-results/ layout: cards are
+  // role=button divs with componentkey="job-card-component-ref-<id>" and no link)
   // plus the classic /jobs/search markup. Detail selectors cover the logged-in
   // "unified top card" and the public guest page.
   {
@@ -127,14 +129,23 @@ export const PRESETS: SitePreset[] = [
     host: '(^|\\.)linkedin\\.com$',
     listing: {
       links: [
+        // New layout first, so the job open in the detail pane keeps its list card.
+        '[componentkey^="job-card-component-ref-"]',
         'a[href*="/jobs/view/"]',
         'a[href*="currentJobId="]',
         '[data-occludable-job-id]',
         '[data-job-id]',
       ],
-      idAttr: { attr: 'data-occludable-job-id', template: '/jobs/view/{id}/' },
+      idAttr: [
+        { attr: 'data-occludable-job-id', template: '/jobs/view/{id}/' },
+        {
+          attr: 'componentkey',
+          match: '^job-card-component-ref-(\\d+)$',
+          template: '/jobs/view/{id}/',
+        },
+      ],
       jobUrlPattern: '/jobs/view/\\d+|currentJobId=\\d+',
-      card: 'li, [data-occludable-job-id], [data-job-id], a[href*="currentJobId="]',
+      card: '[componentkey^="job-card-component-ref-"], li, [data-occludable-job-id], [data-job-id], a[href*="currentJobId="]',
       cardFields: {
         title: [
           '.job-card-list__title--link',
@@ -150,11 +161,13 @@ export const PRESETS: SitePreset[] = [
           '.artdeco-entity-lockup__subtitle',
           '.job-card-container__primary-description',
           '.base-search-card__subtitle',
+          'div[data-display-contents="true"] + div > p',
         ],
         location: [
           '.job-card-container__metadata-wrapper li',
           '.job-card-container__metadata-item',
           '.job-search-card__location',
+          'div[data-display-contents="true"] + div + p',
         ],
         datePosted: [
           { selector: 'time', attr: 'datetime' },
@@ -165,9 +178,12 @@ export const PRESETS: SitePreset[] = [
         'button[aria-label="View next page"]',
         'button[aria-label="Nächste Seite anzeigen"]',
         '.jobs-search-pagination__button--next',
+        'button[data-testid="pagination-controls-next-button-visible"]',
       ],
-      pageParam: { name: 'start', step: 25, first: 0 },
+      // The new /jobs/search-results/ page is paged by clicking "next".
+      pageParam: { name: 'start', step: 25, first: 0, path: '^/jobs/(?!search-results)' },
       ready: [
+        '[componentkey^="job-card-component-ref-"]',
         'a[href*="/jobs/view/"]',
         'a[href*="currentJobId="]',
         '[data-occludable-job-id]',

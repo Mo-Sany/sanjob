@@ -33,12 +33,13 @@ function hintsFrom(card: Element | null, preset: ListingPreset, now: Date): JobH
 }
 
 function linkUrl(el: Element, preset: ListingPreset, base: string): string | null {
-  if (preset.idAttr) {
-    const holder =
-      el.closest(`[${preset.idAttr.attr}]`) ?? el.querySelector(`[${preset.idAttr.attr}]`);
-    const id = holder?.getAttribute(preset.idAttr.attr);
-    if (id && /^[\w-]+$/.test(id))
-      return toAbsolute(preset.idAttr.template.replace('{id}', id), base);
+  const idAttrs = preset.idAttr ? [preset.idAttr].flat() : [];
+  for (const ia of idAttrs) {
+    const sel = `[${ia.attr}]`;
+    const holder = el.matches(sel) ? el : (el.closest(sel) ?? el.querySelector(sel));
+    let id = holder?.getAttribute(ia.attr) ?? null;
+    if (id && ia.match) id = new RegExp(ia.match).exec(id)?.[1] ?? null;
+    if (id && /^[\w-]+$/.test(id)) return toAbsolute(ia.template.replace('{id}', id), base);
   }
   const anchor = el.closest('a[href]') ?? (el.matches('[href]') ? el : el.querySelector('a[href]'));
   return toAbsolute(anchor?.getAttribute('href'), base);
@@ -49,6 +50,15 @@ function pageParamUrl(pageUrl: string, pp: NonNullable<ListingPreset['pageParam'
   const current = Number(u.searchParams.get(pp.name) ?? pp.first);
   u.searchParams.set(pp.name, String((Number.isFinite(current) ? current : pp.first) + pp.step));
   return u.href;
+}
+
+function usesPageParam(pageUrl: string, pp: NonNullable<ListingPreset['pageParam']>): boolean {
+  if (!pp.path) return true;
+  try {
+    return new RegExp(pp.path, 'i').test(new URL(pageUrl).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function isDisabled(el: Element): boolean {
@@ -76,11 +86,11 @@ function findNext(
   if (el) {
     const href = toAbsolute(el.getAttribute('href'), pageUrl);
     if (href && href !== pageUrl) return { nextUrl: href, nextIsClick: false };
-    if (preset?.pageParam)
+    if (preset?.pageParam && usesPageParam(pageUrl, preset.pageParam))
       return { nextUrl: pageParamUrl(pageUrl, preset.pageParam), nextIsClick: false };
     return { nextUrl: pageUrl, nextIsClick: true };
   }
-  if (preset?.pageParam?.always) {
+  if (preset?.pageParam?.always && usesPageParam(pageUrl, preset.pageParam)) {
     return { nextUrl: pageParamUrl(pageUrl, preset.pageParam), nextIsClick: false };
   }
   return { nextUrl: null, nextIsClick: false };

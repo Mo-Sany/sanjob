@@ -26,13 +26,23 @@ export type FieldName = Exclude<keyof JobData, 'url'>;
 /** Rules are tried in order; the first non-empty value wins. */
 export type FieldRules = Partial<Record<FieldName, FieldRule[]>>;
 
+export interface IdAttr {
+  attr: string;
+  template: string;
+  /** Regex applied to the attribute value; group 1 is the id. */
+  match?: string;
+}
+
 export interface ListingPreset {
   /** Selectors for job links. Elements may be <a href> or carry an id attribute (see idAttr). */
   links: string[];
   /** Only accept links whose absolute URL matches this regex. */
   jobUrlPattern?: string;
-  /** Build the URL from an attribute when the href is a tracking redirect. "{id}" is replaced. */
-  idAttr?: { attr: string; template: string };
+  /**
+   * Build the URL from an attribute when the card has no usable href. "{id}" is replaced by the
+   * attribute value, or by the first group of `match` when given.
+   */
+  idAttr?: IdAttr | IdAttr[];
   /** Closest ancestor of a link that represents one job card (used for card hints). */
   card?: string;
   /** Fields read from the result card; only used when the detail page lacks them. */
@@ -41,6 +51,8 @@ export interface ListingPreset {
   next: string[];
   /** URL parameter pagination, used when the next control has no href. */
   pageParam?: {
+    /** Only use the parameter on pages whose path matches this regex (otherwise: click). */
+    path?: string;
     name: string;
     /** Increment per page (e.g. 10 for Indeed "start", 1 for "page"). */
     step: number;

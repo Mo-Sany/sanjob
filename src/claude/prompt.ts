@@ -1,6 +1,6 @@
-import type { JobData, Language, SectionField } from '../shared/types';
+import type { JobColumn, JobData, Language, SectionField } from '../shared/types';
 
-type PromptField = Exclude<keyof JobData, SectionField>;
+type PromptField = Exclude<JobColumn, SectionField>;
 
 /** Keeps prompts a reasonable size when many jobs are selected. */
 export const MAX_DESCRIPTION_CHARS_PER_JOB = 6000;
