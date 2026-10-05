@@ -10,7 +10,17 @@ export interface JobData {
   url: string;
   /** Full raw text of the posting, as on the page. */
   description: string;
+  /** Description sections (empty when the posting has no recognizable headings). */
+  tasks: string;
+  profile: string;
+  offer: string;
+  other: string;
 }
+
+export const SECTION_FIELDS = ['tasks', 'profile', 'offer', 'other'] as const;
+export type SectionField = (typeof SECTION_FIELDS)[number];
+/** The job fields read directly from the page (everything except URL and sections). */
+export type JobCore = Omit<JobData, 'url' | SectionField>;
 
 export interface JobRecord extends JobData {
   id?: number;
@@ -24,7 +34,9 @@ export interface JobRecord extends JobData {
 export type SiteId = 'stepstone' | 'indeed' | 'linkedin' | 'xing' | 'generic';
 
 /** Partial job info visible on a result card; used only to fill fields missing on the detail page. */
-export type JobHints = Partial<Omit<JobData, 'url' | 'description'>>;
+export type JobHints = Partial<
+  Omit<JobData, 'url' | 'description' | 'tasks' | 'profile' | 'offer' | 'other'>
+>;
 
 export interface ListingLink {
   url: string;
@@ -45,6 +57,8 @@ export interface ListingResult {
   /** True if the "next" control has no href and must be clicked instead. */
   nextIsClick: boolean;
   block: BlockInfo | null;
+  /** Content-ready check passed (false = timed out waiting for the page). */
+  ready?: boolean;
 }
 
 export interface DetailResult {
@@ -52,7 +66,29 @@ export interface DetailResult {
   block: BlockInfo | null;
   /** Which fields came from JSON-LD (for diagnostics). */
   source: 'jsonld' | 'selectors' | 'mixed' | 'none';
+  /** Content-ready check passed (false = timed out waiting for the page). */
+  ready?: boolean;
 }
+
+/** What Sanjob sees on the current page before a run starts. */
+export interface PageAnalysis {
+  site: SiteId;
+  /** "XING", "Indeed", … or the host name in generic mode. */
+  siteName: string;
+  isJobList: boolean;
+  itemsOnPage: number;
+  /** Total number of results announced on the page ("360 Jobs gefunden"), if any. */
+  totalResults: number | null;
+  /** Number of result pages, if it can be told. */
+  totalPages: number | null;
+  /** Job URLs on this page (canonical), to check against the history. */
+  links: string[];
+  /** A preset or a clear repeating list was found ("Smart detection"). */
+  confident: boolean;
+}
+
+/** Friendly status messages shown in the progress card. */
+export type NoticeKey = 'retrying' | 'skipped' | 'nothingFound' | 'noResponse';
 
 export type QueueStatus = 'pending' | 'done' | 'error' | 'skipped';
 
@@ -93,9 +129,18 @@ export interface RunState {
   errors: number;
   skipped: number;
   current: string;
+  /** Title of the job being read (from the result card or the page). */
+  currentTitle: string;
+  /** Latest friendly notice for the UI. */
+  notice: { key: NoticeKey; at: number } | null;
+  /** Moving average of the time per job (ms), for the time estimate. */
+  avgItemMs: number;
+  /** Display name of the site ("XING", "Indeed", host name). */
+  siteName: string;
   windowId: number | null;
   tabId: number | null;
   block: BlockInfo | null;
+  /** Technical details of the last problem – only shown behind a "Details" toggle. */
   lastError: string;
   /** Consecutive detail pages that returned (almost) empty data. */
   emptyStreak: number;
@@ -117,4 +162,6 @@ export interface Settings {
   cvText: string;
   /** Claude integration mode. Only 'clipboard' exists today; 'api' is reserved for later. */
   claudeMode: 'clipboard';
+  /** Export: true = all stored jobs, false = only the latest collection. */
+  exportAppend: boolean;
 }

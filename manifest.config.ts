@@ -32,7 +32,15 @@ export default defineManifest({
   },
   side_panel: { default_path: 'src/sidepanel/index.html' },
   background: { service_worker: 'src/background/service-worker.ts', type: 'module' },
-  permissions: ['activeTab', 'scripting', 'storage', 'sidePanel', 'alarms', 'tabs'],
+  permissions: [
+    'activeTab',
+    'scripting',
+    'storage',
+    'sidePanel',
+    'alarms',
+    'tabs',
+    'notifications',
+  ],
   host_permissions: SUPPORTED_HOSTS,
   // Generic fallback mode: access to other sites is requested per origin at runtime.
   optional_host_permissions: ['https://*/*', 'http://*/*'],

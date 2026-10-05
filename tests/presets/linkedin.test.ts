@@ -56,8 +56,8 @@ describe('LinkedIn preset – fixtures/linkedin/detail.synthetic.html', () => {
       contractType: 'Full-time',
       url: 'https://www.linkedin.com/jobs/view/4462295045/',
     });
-    expect(job.description).toBe(
-      'About the job\n\nContoso builds automation lines for the automotive industry.\n\nYour tasks\n\nPLC programming (Siemens TIA Portal)\nCommissioning at customer sites',
+    expect(job.description).toMatch(
+      /^About the job\n\nContoso builds automation lines for the automotive industry\.\n\nYour tasks\n\nPLC programming \(Siemens TIA Portal\)\nCommissioning at customer sites\nRequirements\n/,
     );
   });
 

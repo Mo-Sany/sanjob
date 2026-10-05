@@ -1,14 +1,15 @@
 import type { SitePreset } from '../presets/types';
 import { normalizeDate } from '../shared/date';
-import { elementText, oneLine } from '../shared/text';
-import type { DetailResult, JobData, JobHints } from '../shared/types';
+import { splitSections } from '../sections/split';
+import { elementText, htmlToFragment, oneLine } from '../shared/text';
+import type { DetailResult, JobCore, JobData, JobHints } from '../shared/types';
 import { canonicalJobUrl } from '../shared/url';
 import { detectBlock } from './block';
-import { readFields } from './fields';
-import { genericDescription } from './generic';
+import { firstMatchingElement, readFields } from './fields';
+import { genericDescription, genericDescriptionElement } from './generic';
 import { findJobPostings, jobFromJsonLd } from './jsonld';
 
-type Fields = Omit<JobData, 'url'>;
+type Fields = JobCore;
 const FIELD_NAMES: Array<keyof Fields> = [
   'title',
   'company',
@@ -65,6 +66,7 @@ export function extractDetail(input: DetailInput): DetailResult {
   let usedLd = false;
   let usedSel = false;
   const fromPage = new Set<keyof Fields>();
+  let descriptionSource: 'ld' | 'sel' | null = null;
   for (const name of FIELD_NAMES) {
     const order: Array<[string | undefined, 'ld' | 'sel' | 'hint']> =
       name === 'description'
@@ -83,6 +85,7 @@ export function extractDetail(input: DetailInput): DetailResult {
         if (src === 'ld') usedLd = true;
         if (src === 'sel') usedSel = true;
         if (src !== 'hint') fromPage.add(name);
+        if (name === 'description' && src !== 'hint') descriptionSource = src;
         break;
       }
     }
@@ -98,8 +101,19 @@ export function extractDetail(input: DetailInput): DetailResult {
   if (!hasContent || block) {
     return { job: null, block, source: 'none' };
   }
+  // Split the description into sections using the HTML structure it came from.
+  let descriptionRoot: Node | null = null;
+  if (descriptionSource === 'sel') {
+    descriptionRoot = preset
+      ? firstMatchingElement(doc, preset.detail.fields.description)
+      : genericDescriptionElement(doc);
+  } else if (descriptionSource === 'ld' && typeof posting?.['description'] === 'string') {
+    descriptionRoot = htmlToFragment(posting['description'], doc);
+  }
+  const sections = splitSections(descriptionRoot ?? job.description);
+
   return {
-    job: { ...job, url: canonicalJobUrl(input.jobUrl ?? pageUrl) },
+    job: { ...job, ...sections, url: canonicalJobUrl(input.jobUrl ?? pageUrl) },
     block: null,
     source: usedLd && usedSel ? 'mixed' : usedLd ? 'jsonld' : 'selectors',
   };

@@ -61,8 +61,8 @@ describe('XING preset – synthetic fixtures', () => {
       salary: '48.000 € – 55.000 € (XING-Schätzung)',
       contractType: 'Full-time, Part-time',
     });
-    expect(job.description).toBe(
-      'Nord Energie betreibt Umspannwerke in ganz Norddeutschland.\n\nDeine Aufgaben\nInbetriebnahme von Schaltanlagen\nFehlersuche und Dokumentation',
+    expect(job.description).toMatch(
+      /^Nord Energie betreibt Umspannwerke in ganz Norddeutschland\.\n\nDeine Aufgaben\nInbetriebnahme von Schaltanlagen\nFehlersuche und Dokumentation\n\nIHR PROFIL:/,
     );
   });
 });

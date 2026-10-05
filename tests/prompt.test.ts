@@ -11,6 +11,10 @@ const job: JobData = {
   contractType: 'Full-time',
   url: 'https://www.linkedin.com/jobs/view/1/',
   description: 'PLC programming, TIA Portal',
+  tasks: '',
+  profile: '',
+  offer: '',
+  other: '',
 };
 
 describe('CV match prompt', () => {

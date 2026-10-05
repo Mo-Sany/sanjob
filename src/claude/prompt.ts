@@ -1,4 +1,6 @@
-import type { JobData, Language } from '../shared/types';
+import type { JobData, Language, SectionField } from '../shared/types';
+
+type PromptField = Exclude<keyof JobData, SectionField>;
 
 /** Keeps prompts a reasonable size when many jobs are selected. */
 export const MAX_DESCRIPTION_CHARS_PER_JOB = 6000;
@@ -26,37 +28,36 @@ Antworte für JEDE Stelle genau in dieser Struktur:
 Stütze dich nur auf den Lebenslauf und den Anzeigentext. Erfinde keine Erfahrung, die ich nicht habe.`,
 };
 
-const LABELS: Record<Language, { cv: string; job: string; fields: Record<keyof JobData, string> }> =
-  {
-    en: {
-      cv: 'MY CV / SKILLS',
-      job: 'JOB',
-      fields: {
-        title: 'Title',
-        company: 'Company',
-        location: 'Location',
-        datePosted: 'Date posted',
-        salary: 'Salary',
-        contractType: 'Contract type',
-        url: 'URL',
-        description: 'Description',
-      },
+const LABELS: Record<Language, { cv: string; job: string; fields: Record<PromptField, string> }> = {
+  en: {
+    cv: 'MY CV / SKILLS',
+    job: 'JOB',
+    fields: {
+      title: 'Title',
+      company: 'Company',
+      location: 'Location',
+      datePosted: 'Date posted',
+      salary: 'Salary',
+      contractType: 'Contract type',
+      url: 'URL',
+      description: 'Description',
     },
-    de: {
-      cv: 'MEIN LEBENSLAUF / FÄHIGKEITEN',
-      job: 'STELLE',
-      fields: {
-        title: 'Titel',
-        company: 'Unternehmen',
-        location: 'Ort',
-        datePosted: 'Veröffentlicht',
-        salary: 'Gehalt',
-        contractType: 'Vertragsart',
-        url: 'URL',
-        description: 'Beschreibung',
-      },
+  },
+  de: {
+    cv: 'MEIN LEBENSLAUF / FÄHIGKEITEN',
+    job: 'STELLE',
+    fields: {
+      title: 'Titel',
+      company: 'Unternehmen',
+      location: 'Ort',
+      datePosted: 'Veröffentlicht',
+      salary: 'Gehalt',
+      contractType: 'Vertragsart',
+      url: 'URL',
+      description: 'Beschreibung',
     },
-  };
+  },
+};
 
 function jobBlock(job: JobData, index: number, lang: Language): string {
   const l = LABELS[lang];

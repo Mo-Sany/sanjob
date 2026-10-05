@@ -121,15 +121,21 @@ export function oneLine(text: string | null | undefined): string {
   return (text ?? '').replace(/\s+/g, ' ').trim();
 }
 
+/** Parses an HTML fragment (e.g. a JSON-LD description) into an inert fragment. */
+export function htmlToFragment(html: string, doc: Document): DocumentFragment {
+  const parse = (source: string): DocumentFragment => {
+    const tpl = doc.createElement('template');
+    tpl.innerHTML = source;
+    return tpl.content;
+  };
+  const first = parse(html);
+  // Some sites HTML-escape the markup twice ("&lt;p&gt;"); decode once more in that case.
+  const text = first.textContent ?? '';
+  return /<\/?(p|br|ul|li|div|strong|b|h\d)\b[^>]*>/i.test(text) ? parse(text) : first;
+}
+
 /** Converts an HTML fragment (e.g. JSON-LD description) to plain text. */
 export function htmlToText(html: string, doc: Document): string {
   if (!/[<&]/.test(html)) return tidy(html);
-  const parse = (source: string): string => {
-    const tpl = doc.createElement('template');
-    tpl.innerHTML = source;
-    return elementText(tpl.content);
-  };
-  const text = parse(html);
-  // Some sites HTML-escape the markup twice ("&lt;p&gt;"); decode once more in that case.
-  return /<\/?(p|br|ul|li|div|strong|b|h\d)\b[^>]*>/i.test(text) ? parse(text) : text;
+  return elementText(htmlToFragment(html, doc));
 }

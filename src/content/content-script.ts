@@ -1,13 +1,14 @@
 /**
  * Content script, injected on demand with chrome.scripting into the collection tab
- * (or the user's tab for the element picker). It only reads the page; it never fills forms,
- * solves challenges or touches credentials.
+ * (or the user's tab for page analysis and the list picker). It only reads the page; it never
+ * fills forms, solves challenges or touches credentials.
  */
+import { analyzePage } from '../extract/analyze';
 import { extractDetail } from '../extract/detail';
-import { clickNext, extractListing } from '../extract/listing';
 import { detectCardGroups } from '../extract/generic';
+import { clickNext, extractListing } from '../extract/listing';
 import { presetForUrl } from '../presets/presets';
-import type { ContentCommand, ContentResponse } from '../shared/messages';
+import { KEEPALIVE_PORT, type ContentCommand, type ContentResponse } from '../shared/messages';
 import { startPicker } from './picker';
 
 declare global {
@@ -17,20 +18,40 @@ declare global {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const DEFAULT_READY_TIMEOUT = 15000;
 
-async function waitForAny(selectors: string[], timeoutMs: number): Promise<boolean> {
-  const end = Date.now() + timeoutMs;
-  while (Date.now() < end) {
-    for (const sel of selectors) {
-      try {
-        if (document.querySelector(sel)) return true;
-      } catch {
-        /* invalid selector */
-      }
+function anyMatches(selectors: string[]): boolean {
+  for (const sel of selectors) {
+    try {
+      if (document.querySelector(sel)) return true;
+    } catch {
+      /* invalid selector in a preset */
     }
-    await sleep(300);
   }
   return false;
+}
+
+/**
+ * "Content ready" check: resolves true as soon as one of the selectors exists (watched with a
+ * MutationObserver, so late-rendering single-page apps are caught), false after the timeout.
+ */
+export function waitForContent(selectors: string[], timeoutMs: number): Promise<boolean> {
+  if (anyMatches(selectors)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (value: boolean): void => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const observer = new MutationObserver(() => {
+      if (anyMatches(selectors)) done(true);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    const timer = setTimeout(() => done(anyMatches(selectors)), timeoutMs);
+  });
 }
 
 /** Scrolls the page and the main scrollable list so lazy-loaded cards render. */
@@ -47,11 +68,42 @@ async function autoScroll(steps = 8): Promise<void> {
   window.scrollTo(0, 0);
 }
 
+/**
+ * Long-lived port to the service worker while this page is open in the collection tab.
+ * Regular messages on it keep the service worker awake during long page loads.
+ */
+let keepAliveStarted = false;
+function keepServiceWorkerAwake(): void {
+  if (keepAliveStarted) return;
+  keepAliveStarted = true;
+  try {
+    const port = chrome.runtime.connect({ name: KEEPALIVE_PORT });
+    const timer = setInterval(() => {
+      try {
+        port.postMessage({ type: 'ping' });
+      } catch {
+        clearInterval(timer);
+      }
+    }, 20000);
+    port.onDisconnect.addListener(() => clearInterval(timer));
+    addEventListener('pagehide', () => {
+      clearInterval(timer);
+      port.disconnect();
+    });
+  } catch {
+    /* extension reloaded */
+  }
+}
+
 async function run(cmd: ContentCommand): Promise<ContentResponse> {
   const preset = presetForUrl(location.href);
   switch (cmd.type) {
     case 'listing': {
-      await waitForAny(preset?.listing.ready ?? ['a[href]'], 15000);
+      keepServiceWorkerAwake();
+      const selectors = cmd.generic
+        ? [cmd.generic.cardSelector]
+        : (preset?.listing.ready ?? ['a[href]']);
+      const ready = await waitForContent(selectors, cmd.timeoutMs ?? DEFAULT_READY_TIMEOUT);
       await sleep(600);
       await autoScroll();
       const result = extractListing({
@@ -60,10 +112,14 @@ async function run(cmd: ContentCommand): Promise<ContentResponse> {
         preset,
         generic: cmd.generic,
       });
-      return { type: 'listing', result };
+      return { type: 'listing', result: { ...result, ready } };
     }
     case 'detail': {
-      await waitForAny(preset?.detail.ready ?? ['h1', 'script[type="application/ld+json"]'], 15000);
+      keepServiceWorkerAwake();
+      const ready = await waitForContent(
+        preset?.detail.ready ?? ['h1', 'script[type="application/ld+json"]'],
+        cmd.timeoutMs ?? DEFAULT_READY_TIMEOUT,
+      );
       await sleep(600);
       const result = extractDetail({
         doc: document,
@@ -72,16 +128,23 @@ async function run(cmd: ContentCommand): Promise<ContentResponse> {
         preset,
         hints: cmd.hints,
       });
-      return { type: 'detail', result };
+      return { type: 'detail', result: { ...result, ready } };
+    }
+    case 'analyze': {
+      // Runs in the user's own tab: no scrolling, only a short wait for late content.
+      const selectors = cmd.generic
+        ? [cmd.generic.cardSelector]
+        : (preset?.listing.ready ?? ['a[href]']);
+      await waitForContent(selectors, 2500);
+      return {
+        type: 'analyze',
+        result: analyzePage({ doc: document, url: location.href, preset, generic: cmd.generic }),
+      };
     }
     case 'clickNext':
       return { type: 'clickNext', clicked: clickNext(document, preset) };
     case 'detectCards': {
       const best = detectCardGroups(document, 1)[0];
-      if (best) {
-        for (const card of best.cards) (card as HTMLElement).style.outline = '2px solid #0d9488';
-        setTimeout(() => best.cards.forEach((c) => ((c as HTMLElement).style.outline = '')), 2500);
-      }
       return {
         type: 'detectCards',
         selector: best?.selector ?? null,
@@ -99,6 +162,7 @@ async function run(cmd: ContentCommand): Promise<ContentResponse> {
         site: preset?.id ?? 'generic',
       };
   }
+  return { type: 'ok' };
 }
 
 if (!window.__sanjob) {

@@ -1,20 +1,22 @@
-import { Fragment } from 'preact';
+import { Fragment, type RefObject } from 'preact';
 import { useMemo, useState } from 'preact/hooks';
 import { getProvider } from '../../claude/provider';
 import { repo } from '../../db/db';
-import { buildXlsx, exportFileName } from '../../export/xlsx';
 import { fmt, type Strings } from '../../shared/i18n';
-import type { JobData, JobRecord, Settings } from '../../shared/types';
-import { downloadBytes } from '../api';
+import { SECTION_FIELDS, type JobData, type JobRecord, type Settings } from '../../shared/types';
+import type { Notify } from '../App';
+import { exportJobs } from '../exporting';
 import { filterJobs, sortJobs, type SortDir, type SortKey } from '../table';
 
 interface Props {
   t: Strings;
   settings: Settings;
+  update: (patch: Partial<Settings>) => Promise<void>;
   jobs: JobRecord[];
   lastRunId: string | null;
   reload: () => Promise<void>;
-  notify: (msg: string) => void;
+  notify: Notify;
+  sectionRef: RefObject<HTMLElement | null>;
 }
 
 const VISIBLE: Array<keyof JobData> = [
@@ -25,15 +27,22 @@ const VISIBLE: Array<keyof JobData> = [
   'salary',
   'contractType',
 ];
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-export function JobTable({ t, settings, jobs, lastRunId, reload, notify }: Props) {
+export function JobTable({
+  t,
+  settings,
+  update,
+  jobs,
+  lastRunId,
+  reload,
+  notify,
+  sectionRef,
+}: Props) {
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('collectedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [append, setAppend] = useState(true);
 
   const rows = useMemo(
     () => sortJobs(filterJobs(jobs, query), sortKey, sortDir),
@@ -77,11 +86,12 @@ export function JobTable({ t, settings, jobs, lastRunId, reload, notify }: Props
     ids.forEach((id) => next.delete(id));
     setSelected(next);
     await reload();
+    notify(fmt(t.deleted, { n: ids.length }), 'info');
   };
 
   const match = async (targets: JobRecord[]): Promise<void> => {
-    if (!settings.cvText.trim()) return notify(t.needCv);
-    if (!targets.length) return notify(t.selectJobsFirst);
+    if (!settings.cvText.trim()) return notify(t.needCv, 'info');
+    if (!targets.length) return notify(t.selectJobsFirst, 'info');
     const provider = getProvider(settings.claudeMode, {
       writeText: (text) => navigator.clipboard.writeText(text),
     });
@@ -89,23 +99,21 @@ export function JobTable({ t, settings, jobs, lastRunId, reload, notify }: Props
       await provider.run({ cv: settings.cvText, jobs: targets, lang: settings.language });
       notify(t.promptCopied);
     } catch (err) {
-      notify(err instanceof Error ? err.message : String(err));
+      console.warn('[Sanjob] clipboard', err);
+      notify(t.copyBlocked, 'warn');
     }
   };
 
   const exportXlsx = (): void => {
-    const list = append ? jobs : jobs.filter((j) => j.runId === lastRunId);
-    if (!list.length) return notify(t.nothingToExport);
-    const ordered = [...list].sort((a, b) => a.collectedAt - b.collectedAt);
-    downloadBytes(buildXlsx(ordered, settings.language), exportFileName(), XLSX_MIME);
-    notify(fmt(t.exported, { n: ordered.length }));
+    const count = exportJobs(jobs, lastRunId, settings);
+    notify(count ? t.exported : t.nothingToExport, count ? 'success' : 'info');
   };
 
   const arrow = (key: SortKey): string =>
     key === sortKey ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   return (
-    <section class="card flex flex-col gap-2">
+    <section ref={sectionRef} class="card flex flex-col gap-2">
       <div class="flex items-center gap-2">
         <h2 class="flex-1 font-semibold">
           {t.table} <span class="text-slate-500">({jobs.length})</span>
@@ -114,7 +122,11 @@ export function JobTable({ t, settings, jobs, lastRunId, reload, notify }: Props
 
       <div class="flex flex-wrap items-center gap-2">
         <label class="flex items-center gap-1 text-xs">
-          <input type="checkbox" checked={append} onChange={() => setAppend(!append)} />
+          <input
+            type="checkbox"
+            checked={settings.exportAppend}
+            onChange={() => void update({ exportAppend: !settings.exportAppend })}
+          />
           <span title={t.appendHint}>{t.appendPrevious}</span>
         </label>
         <button class="btn btn-primary ml-auto" onClick={exportXlsx} disabled={!jobs.length}>
@@ -148,7 +160,13 @@ export function JobTable({ t, settings, jobs, lastRunId, reload, notify }: Props
       </div>
 
       {jobs.length === 0 ? (
-        <p class="py-4 text-center text-xs text-slate-500">{t.noJobs}</p>
+        <div class="flex flex-col items-center gap-1 py-6 text-center">
+          <span class="text-3xl">📋</span>
+          <p class="font-medium">{t.noJobs}</p>
+          <p class="max-w-xs text-xs text-slate-500 dark:text-slate-400">{t.noJobsHint}</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <p class="py-6 text-center text-xs text-slate-500 dark:text-slate-400">{t.noMatches}</p>
       ) : (
         <div class="max-h-[60vh] overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
           <table class="w-full border-collapse text-xs">
@@ -222,7 +240,7 @@ export function JobTable({ t, settings, jobs, lastRunId, reload, notify }: Props
                     </td>
                   </tr>
                   {expanded === job.id && (
-                    <tr class="bg-slate-50 dark:bg-slate-900/60">
+                    <tr class="animate-in bg-slate-50 dark:bg-slate-900/60">
                       <td />
                       <td colSpan={7} class="p-2">
                         <a
@@ -233,9 +251,24 @@ export function JobTable({ t, settings, jobs, lastRunId, reload, notify }: Props
                         >
                           {job.url}
                         </a>
-                        <pre class="mt-2 max-h-80 overflow-auto font-sans text-xs whitespace-pre-wrap">
-                          {job.description}
-                        </pre>
+                        {SECTION_FIELDS.some((f) => job[f]) ? (
+                          <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                            {SECTION_FIELDS.filter((f) => job[f]).map((f) => (
+                              <div key={f} class="rounded-lg bg-white p-2 dark:bg-slate-800">
+                                <div class="mb-1 text-[11px] font-semibold text-slate-500 uppercase dark:text-slate-400">
+                                  {t.columns[f]}
+                                </div>
+                                <pre class="max-h-48 overflow-auto font-sans text-xs whitespace-pre-wrap">
+                                  {job[f]}
+                                </pre>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <pre class="mt-2 max-h-80 overflow-auto font-sans text-xs whitespace-pre-wrap">
+                            {job.description}
+                          </pre>
+                        )}
                       </td>
                     </tr>
                   )}

@@ -1,24 +1,43 @@
+/**
+ * The collection run, orchestrated entirely in the service worker.
+ * It never depends on the active tab or on the side panel: pages load in an inactive tab of a
+ * dedicated window, and all state (queue, progress, results) lives in IndexedDB.
+ */
 import { isMostlyEmpty } from '../extract/detail';
 import { repo } from '../db/db';
 import { presetForUrl } from '../presets/presets';
 import { loadSettings, randomDelayMs } from '../shared/settings';
-import type { DetailResult, GenericConfig, RunState, WindowMode } from '../shared/types';
+import type { ContentCommand, ContentResponse } from '../shared/messages';
+import type {
+  DetailResult,
+  GenericConfig,
+  ListingResult,
+  NoticeKey,
+  RunState,
+  WindowMode,
+} from '../shared/types';
 import {
   broadcast,
   closeWindow,
+  createWorkTab,
   createWorkerWindow,
   currentTabUrl,
   navigate,
+  reloadTab,
   runInTab,
   setWindowMode,
   sleep,
   tabExists,
   waitForTabComplete,
+  windowExists,
 } from './browser';
+import { notifyDone, publishToPanels, updateBadge } from './ui';
 
 export const KEEPALIVE_ALARM = 'sanjob-keepalive';
 /** Consecutive near-empty detail pages before suggesting the "small window" mode. */
 const EMPTY_STREAK_HINT = 3;
+/** Content-ready timeout per attempt (then one retry). */
+const READY_TIMEOUT_MS = 15000;
 
 let looping = false;
 /** Set when the next listing step must read the current page instead of navigating (after a click). */
@@ -28,8 +47,12 @@ function newRunId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const describe = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
 async function publish(state: RunState | null): Promise<void> {
+  publishToPanels({ type: 'state', state });
   broadcast({ type: 'state', state });
+  await updateBadge(state);
 }
 
 /**
@@ -46,40 +69,62 @@ async function patchRun(runId: string, patch: Partial<RunState>): Promise<RunSta
   return next;
 }
 
+const notice = (key: NoticeKey): RunState['notice'] => ({ key, at: Date.now() });
+
 async function keepAlive(on: boolean): Promise<void> {
   if (on) await chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
   else await chrome.alarms.clear(KEEPALIVE_ALARM);
 }
 
-/** Ensures the collection window/tab exists; reopens it after a browser restart. */
+/** Ensures the collection window and its inactive work tab exist (reopened after a restart). */
 async function ensureTab(state: RunState): Promise<{ tabId: number; windowId: number | null }> {
   if (state.tabId !== null && (await tabExists(state.tabId))) {
     return { tabId: state.tabId, windowId: state.windowId };
   }
+  if (state.windowId !== null && (await windowExists(state.windowId))) {
+    const tabId = await createWorkTab(state.windowId);
+    await patchRun(state.runId, { tabId });
+    return { tabId, windowId: state.windowId };
+  }
   const settings = await loadSettings();
-  const created = await createWorkerWindow('about:blank', settings.windowMode);
+  const created = await createWorkerWindow(settings.windowMode);
   await patchRun(state.runId, created);
   return created;
+}
+
+/** A run is already active. */
+export class BusyError extends Error {
+  constructor() {
+    super('A collection is already in progress');
+  }
 }
 
 export async function startRun(
   url: string,
   maxPages: number,
   generic?: GenericConfig,
+  siteName?: string,
 ): Promise<RunState> {
   const existing = await repo.getRun();
   if (existing && ['running', 'paused', 'blocked'].includes(existing.status)) {
-    throw new Error('A collection is already in progress. Cancel it first.');
+    throw new BusyError();
   }
   if (existing) await repo.clearQueue(existing.runId);
   const preset = presetForUrl(url);
   const settings = await loadSettings();
-  const { windowId, tabId } = await createWorkerWindow('about:blank', settings.windowMode);
+  const { windowId, tabId } = await createWorkerWindow(settings.windowMode);
+  let host = '';
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    /* ignore */
+  }
   const state: RunState = {
     runId: newRunId(),
     status: 'running',
     phase: 'listing',
     site: preset?.id ?? 'generic',
+    siteName: siteName || preset?.name || host,
     startUrl: url,
     pageUrl: url,
     pagesDone: 0,
@@ -89,6 +134,9 @@ export async function startRun(
     errors: 0,
     skipped: 0,
     current: url,
+    currentTitle: '',
+    notice: null,
+    avgItemMs: 0,
     windowId,
     tabId,
     block: null,
@@ -111,7 +159,7 @@ export async function startRun(
 export async function pauseRun(): Promise<void> {
   const cur = await repo.getRun();
   if (!cur || cur.status !== 'running') return;
-  const next = { ...cur, status: 'paused' as const, updatedAt: Date.now() };
+  const next: RunState = { ...cur, status: 'paused', updatedAt: Date.now() };
   await repo.setRun(next);
   await publish(next);
   await keepAlive(false);
@@ -126,7 +174,7 @@ export async function resumeRun(): Promise<void> {
     ...cur,
     status: 'running',
     block: null,
-    lastError: '',
+    notice: null,
     updatedAt: Date.now(),
   };
   await repo.setRun(next);
@@ -155,13 +203,15 @@ export async function applyWindowMode(mode: WindowMode): Promise<void> {
 export async function markInterrupted(): Promise<void> {
   const cur = await repo.getRun();
   if (cur && ['running', 'paused', 'blocked'].includes(cur.status)) {
-    await repo.setRun({
+    const next: RunState = {
       ...cur,
       status: 'interrupted',
       windowId: null,
       tabId: null,
       updatedAt: Date.now(),
-    });
+    };
+    await repo.setRun(next);
+    await updateBadge(next);
   }
   await keepAlive(false);
 }
@@ -176,9 +226,18 @@ export async function onWindowClosed(windowId: number): Promise<void> {
   await publish(next);
 }
 
+/** The user closed only the work tab: a new one is created on the next step. */
+export async function onTabClosed(tabId: number): Promise<void> {
+  const cur = await repo.getRun();
+  if (!cur || cur.tabId !== tabId) return;
+  await repo.setRun({ ...cur, tabId: null, updatedAt: Date.now() });
+  skipNavigate = false;
+}
+
 /** Restarts the loop if the service worker was suspended while a run was active. */
 export async function ensureLoop(): Promise<void> {
   const cur = await repo.getRun();
+  await updateBadge(cur);
   if (cur?.status === 'running' && !looping) void loop();
   if (!cur || cur.status !== 'running') await keepAlive(false);
 }
@@ -191,8 +250,9 @@ async function stillRunning(runId: string): Promise<boolean> {
 async function politeDelay(runId: string): Promise<void> {
   const ms = randomDelayMs(await loadSettings());
   const end = Date.now() + ms;
-  while (Date.now() < end && (await stillRunning(runId)))
+  while (Date.now() < end && (await stillRunning(runId))) {
     await sleep(Math.min(1000, end - Date.now()));
+  }
 }
 
 async function loop(): Promise<void> {
@@ -207,8 +267,14 @@ async function loop(): Promise<void> {
         else if (state.phase === 'details') await detailStep(state);
         else break;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        await patchRun(state.runId, { status: 'error', lastError: message });
+        // Unexpected problem: pause with a friendly notice; the details stay technical.
+        console.error('[Sanjob] run step', err);
+        await patchRun(state.runId, {
+          status: 'paused',
+          notice: notice('noResponse'),
+          lastError: describe(err),
+        });
+        await keepAlive(false);
         break;
       }
     }
@@ -217,21 +283,79 @@ async function loop(): Promise<void> {
   }
 }
 
+type Outcome<T> = { result: T | null; problem: string };
+
+/**
+ * Loads `url` (unless null) in the work tab and runs one content command. If the page does
+ * not become ready within 15 s, or does not respond, it is reloaded and tried once more.
+ */
+async function loadAndRead<T extends ListingResult | DetailResult>(
+  state: RunState,
+  tabId: number,
+  url: string | null,
+  cmd: ContentCommand,
+  hasData: (r: T) => boolean,
+): Promise<Outcome<T>> {
+  let problem = '';
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      if (attempt === 1 && url) await navigate(tabId, url);
+      if (attempt === 2) {
+        await patchRun(state.runId, { notice: notice('retrying') });
+        await reloadTab(tabId);
+      }
+      if (!(await stillRunning(state.runId))) return { result: null, problem: '' };
+      const res: ContentResponse = await runInTab(tabId, cmd);
+      const result = 'result' in res ? (res.result as T) : null;
+      if (result && (result.ready !== false || hasData(result) || result.block)) {
+        return { result, problem: '' };
+      }
+      problem = 'content not ready after 15 s';
+      if (attempt === 2 && result) return { result, problem };
+    } catch (err) {
+      problem = describe(err);
+      console.warn('[Sanjob] page attempt', attempt, problem);
+    }
+  }
+  return { result: null, problem };
+}
+
 async function listingStep(state: RunState): Promise<void> {
   const { tabId, windowId } = await ensureTab(state);
   const pageUrl = state.pageUrl ?? state.startUrl;
-  if (skipNavigate) skipNavigate = false;
-  else await navigate(tabId, pageUrl);
+  const navigateTo = skipNavigate ? null : pageUrl;
+  skipNavigate = false;
+  await patchRun(state.runId, { current: pageUrl, currentTitle: '' });
+
+  const { result, problem } = await loadAndRead<ListingResult>(
+    state,
+    tabId,
+    navigateTo,
+    { type: 'listing', generic: state.generic, timeoutMs: READY_TIMEOUT_MS },
+    (r) => r.links.length > 0,
+  );
   if (!(await stillRunning(state.runId))) return;
 
-  await patchRun(state.runId, { current: pageUrl });
-  const res = await runInTab(tabId, { type: 'listing', generic: state.generic });
-  if (res.type !== 'listing') throw new Error('Unexpected response');
-  const { links, nextUrl, nextIsClick, block } = res.result;
+  if (!result) {
+    // The result page never answered: read the jobs found so far, or pause.
+    const counts = await repo.queueCounts(state.runId);
+    if (counts.pending > 0) {
+      await patchRun(state.runId, { phase: 'details', pageUrl: null, lastError: problem });
+    } else {
+      await patchRun(state.runId, {
+        status: 'paused',
+        notice: notice('noResponse'),
+        lastError: problem,
+      });
+      await keepAlive(false);
+    }
+    return;
+  }
 
+  const { links, nextUrl, nextIsClick, block } = result;
   if (block) {
     await setWindowMode(windowId, 'focused');
-    await patchRun(state.runId, { status: 'blocked', block });
+    await patchRun(state.runId, { status: 'blocked', block, lastError: block.reason });
     return;
   }
 
@@ -248,6 +372,8 @@ async function listingStep(state: RunState): Promise<void> {
     total: counts.total - counts.skipped,
     skipped: counts.skipped,
   };
+  if (links.length === 0 && state.pagesDone === 0) patch.notice = notice('nothingFound');
+
   if (lastPage) {
     await patchRun(state.runId, { ...patch, phase: 'details', pageUrl: null });
     await politeDelay(state.runId);
@@ -271,46 +397,57 @@ async function listingStep(state: RunState): Promise<void> {
   await politeDelay(state.runId);
 }
 
+async function finishRun(state: RunState): Promise<void> {
+  const done = await patchRun(state.runId, {
+    status: 'done',
+    phase: 'done',
+    current: '',
+    currentTitle: '',
+  });
+  await keepAlive(false);
+  await closeWindow(state.windowId);
+  await patchRun(state.runId, { windowId: null, tabId: null });
+  if (done) await notifyDone(done.done, (await loadSettings()).language);
+}
+
 async function detailStep(state: RunState): Promise<void> {
   const item = await repo.nextPending(state.runId);
   if (!item || item.id === undefined) {
-    await patchRun(state.runId, { status: 'done', phase: 'done', current: '' });
-    await keepAlive(false);
-    await closeWindow(state.windowId);
-    await patchRun(state.runId, { windowId: null, tabId: null });
+    await finishRun(state);
     return;
   }
+  const startedAt = Date.now();
   const { tabId, windowId } = await ensureTab(state);
-  await patchRun(state.runId, { current: item.url });
-  let result: DetailResult;
-  try {
-    await navigate(tabId, item.url);
-    if (!(await stillRunning(state.runId))) return;
-    const res = await runInTab(tabId, { type: 'detail', jobUrl: item.url, hints: item.hints });
-    if (res.type !== 'detail') throw new Error('Unexpected response');
-    result = res.result;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await repo.markQueue(item.id, 'error', message);
-    await patchRun(state.runId, { errors: state.errors + 1, lastError: `${item.url}: ${message}` });
-    await politeDelay(state.runId);
-    return;
-  }
+  await patchRun(state.runId, { current: item.url, currentTitle: item.hints?.title ?? '' });
 
-  if (result.block) {
+  const { result, problem } = await loadAndRead<DetailResult>(
+    state,
+    tabId,
+    item.url,
+    { type: 'detail', jobUrl: item.url, hints: item.hints, timeoutMs: READY_TIMEOUT_MS },
+    (r) => r.job !== null,
+  );
+  if (!(await stillRunning(state.runId))) return;
+
+  if (result?.block) {
     await setWindowMode(windowId, 'focused');
-    await patchRun(state.runId, { status: 'blocked', block: result.block });
+    await patchRun(state.runId, {
+      status: 'blocked',
+      block: result.block,
+      lastError: result.block.reason,
+    });
     return;
   }
 
   const settings = await loadSettings();
-  const empty = isMostlyEmpty(result.job);
+  const empty = isMostlyEmpty(result?.job ?? null);
   const emptyStreak = empty ? state.emptyStreak + 1 : 0;
   const suggestWindowMode =
     state.suggestWindowMode ||
     (settings.windowMode === 'minimized' && emptyStreak >= EMPTY_STREAK_HINT);
+  const why = problem || 'no job data found on the page';
 
-  if (result.job) {
+  if (result?.job) {
     await repo.addJob({
       ...result.job,
       site: state.site,
@@ -318,16 +455,32 @@ async function detailStep(state: RunState): Promise<void> {
       collectedAt: Date.now(),
     });
     await repo.markQueue(item.id, 'done');
-    await patchRun(state.runId, { done: state.done + 1, emptyStreak, suggestWindowMode });
-    broadcast({ type: 'jobsChanged' });
   } else {
-    await repo.markQueue(item.id, 'error', 'No job data found on the page');
+    await repo.markQueue(item.id, 'error', why);
+  }
+
+  await politeDelay(state.runId);
+  const elapsed = Date.now() - startedAt;
+  const avgItemMs = state.avgItemMs ? Math.round(state.avgItemMs * 0.7 + elapsed * 0.3) : elapsed;
+
+  if (result?.job) {
     await patchRun(state.runId, {
-      errors: state.errors + 1,
-      lastError: `${item.url}: no job data found`,
+      done: state.done + 1,
+      currentTitle: result.job.title,
       emptyStreak,
       suggestWindowMode,
+      avgItemMs,
+    });
+    publishToPanels({ type: 'jobsChanged' });
+    broadcast({ type: 'jobsChanged' });
+  } else {
+    await patchRun(state.runId, {
+      errors: state.errors + 1,
+      notice: notice('skipped'),
+      lastError: `${item.url}: ${why}`,
+      emptyStreak,
+      suggestWindowMode,
+      avgItemMs,
     });
   }
-  await politeDelay(state.runId);
 }

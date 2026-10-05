@@ -7,18 +7,38 @@ export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 
 const NORMAL_SIZE = { width: 520, height: 700 };
 
+/**
+ * Opens the dedicated collection window. Job pages are loaded in a separate tab created with
+ * active:false inside it, so the run never touches the user's own tabs.
+ */
 export async function createWorkerWindow(
-  url: string,
   mode: WindowMode,
 ): Promise<{ windowId: number; tabId: number }> {
   const win = await chrome.windows.create(
     mode === 'minimized'
-      ? { url, state: 'minimized', focused: false, type: 'normal' }
-      : { url, focused: false, type: 'normal', ...NORMAL_SIZE, left: 40, top: 40 },
+      ? { url: 'about:blank', state: 'minimized', focused: false, type: 'normal' }
+      : { url: 'about:blank', focused: false, type: 'normal', ...NORMAL_SIZE, left: 40, top: 40 },
   );
-  const tabId = win?.tabs?.[0]?.id;
-  if (!win?.id || tabId === undefined) throw new Error('Could not open the collection window');
+  if (!win?.id) throw new Error('chrome.windows.create returned no window');
+  const tabId = await createWorkTab(win.id);
   return { windowId: win.id, tabId };
+}
+
+/** A background (inactive) tab in the collection window. */
+export async function createWorkTab(windowId: number): Promise<number> {
+  const tab = await chrome.tabs.create({ windowId, url: 'about:blank', active: false });
+  if (tab.id === undefined) throw new Error('chrome.tabs.create returned no tab');
+  return tab.id;
+}
+
+export async function windowExists(windowId: number | null): Promise<boolean> {
+  if (windowId === null) return false;
+  try {
+    await chrome.windows.get(windowId);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function tabExists(tabId: number | null): Promise<boolean> {
@@ -88,6 +108,12 @@ export function waitForTabComplete(tabId: number, timeoutMs = 45000): Promise<vo
 
 export async function navigate(tabId: number, url: string): Promise<void> {
   await chrome.tabs.update(tabId, { url });
+  await sleep(300);
+  await waitForTabComplete(tabId);
+}
+
+export async function reloadTab(tabId: number): Promise<void> {
+  await chrome.tabs.reload(tabId);
   await sleep(300);
   await waitForTabComplete(tabId);
 }

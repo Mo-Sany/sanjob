@@ -1,39 +1,59 @@
-import type { Strings } from '../../shared/i18n';
-import type { RunState } from '../../shared/types';
+import { useEffect, useState } from 'preact/hooks';
+import { fmt, formatDuration, formatNumber, type Strings } from '../../shared/i18n';
+import type { RunState, Settings } from '../../shared/types';
 import { send } from '../api';
+import type { Notify } from '../App';
 
 interface Props {
   t: Strings;
   run: RunState;
-  notify: (msg: string) => void;
+  settings: Settings;
+  notify: Notify;
 }
 
-const STATUS_COLORS: Record<RunState['status'], string> = {
-  idle: 'bg-slate-200 text-slate-800',
-  running: 'bg-teal-100 text-teal-800',
-  paused: 'bg-amber-100 text-amber-800',
-  blocked: 'bg-rose-100 text-rose-800',
-  interrupted: 'bg-amber-100 text-amber-800',
-  done: 'bg-emerald-100 text-emerald-800',
-  error: 'bg-rose-100 text-rose-800',
+/** How long a notice ("trying again…") stays visible. */
+const NOTICE_MS = 12000;
+
+const DOT: Record<RunState['status'], string> = {
+  idle: 'bg-slate-400',
+  running: 'bg-teal-500 animate-pulse',
+  paused: 'bg-amber-500',
+  blocked: 'bg-rose-500 animate-pulse',
+  interrupted: 'bg-amber-500',
+  done: 'bg-emerald-500',
+  error: 'bg-amber-500',
 };
 
-export function ProgressPanel({ t, run, notify }: Props) {
+export function ProgressCard({ t, run, settings, notify }: Props) {
+  const [now, setNow] = useState(Date.now());
+  const [showDetails, setShowDetails] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const act = async (type: 'pause' | 'resume' | 'cancel'): Promise<void> => {
-    if (type === 'cancel' && !confirm(t.confirmCancel)) return;
+    if (type === 'cancel' && !confirm(t.confirmStop)) return;
     const res = await send({ type });
-    if (!res.ok) notify(res.error ?? 'Error');
+    if (!res.ok) notify(t.problems[res.code ?? 'unknown'], 'warn');
   };
-  const percent = run.total ? Math.round(((run.done + run.errors) / run.total) * 100) : 0;
-  const canResume = ['paused', 'blocked', 'interrupted', 'error'].includes(run.status);
+
+  const n = (x: number): string => formatNumber(x, settings.language);
+  const processed = run.done + run.errors;
+  const percent = run.total ? Math.min(100, Math.round((processed / run.total) * 100)) : 0;
+  const canContinue = ['paused', 'blocked', 'interrupted', 'error'].includes(run.status);
+  const showNotice = run.notice && (now - run.notice.at < NOTICE_MS || run.status !== 'running');
+
+  const avgSec = (settings.delayMinSec + settings.delayMaxSec) / 2 + 3;
+  const perItemMs = run.avgItemMs || avgSec * 1000;
+  const remainingMs = Math.max(0, run.total - processed) * perItemMs;
 
   return (
-    <section class="card flex flex-col gap-3" aria-live="polite">
+    <section class="card animate-in flex flex-col gap-3" aria-live="polite">
       <div class="flex items-center gap-2">
-        <span class={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLORS[run.status]}`}>
-          {t.status[run.status]}
-        </span>
-        <span class="text-xs text-slate-500 dark:text-slate-400">{t.phase[run.phase]}</span>
+        <span class={`h-2.5 w-2.5 rounded-full ${DOT[run.status]}`} />
+        <span class="font-semibold">{t.status[run.status]}</span>
+        <span class="truncate text-xs text-slate-500 dark:text-slate-400">· {run.siteName}</span>
       </div>
 
       {run.status === 'interrupted' && (
@@ -43,16 +63,14 @@ export function ProgressPanel({ t, run, notify }: Props) {
       )}
 
       {run.status === 'blocked' && run.block && (
-        <div class="rounded-lg border-2 border-rose-400 bg-rose-50 p-3 text-rose-900 dark:bg-rose-950 dark:text-rose-100">
-          <p class="font-semibold">{t.blocked[run.block.kind]}</p>
-          <p class="mt-1 text-xs">{t.blockedHelp}</p>
-          <p class="mt-1 text-[11px] opacity-70">{run.block.reason}</p>
+        <div class="animate-in rounded-lg border-2 border-amber-400 bg-amber-50 p-3 text-amber-950 dark:bg-amber-950 dark:text-amber-100">
+          <p class="font-medium">{fmt(t.blocked[run.block.kind], { site: run.siteName })}</p>
         </div>
       )}
 
-      {run.status === 'error' && run.lastError && (
-        <p class="rounded-lg bg-rose-50 p-2 text-xs text-rose-900 dark:bg-rose-950 dark:text-rose-200">
-          {run.lastError}
+      {showNotice && run.notice && run.status !== 'blocked' && (
+        <p class="animate-in rounded-lg bg-sky-50 p-2 text-xs text-sky-900 dark:bg-sky-950 dark:text-sky-100">
+          {t.notices[run.notice.key]}
         </p>
       )}
 
@@ -76,52 +94,103 @@ export function ProgressPanel({ t, run, notify }: Props) {
         </div>
       )}
 
-      <dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-        <dt class="text-slate-500 dark:text-slate-400">{t.pages}</dt>
-        <dd>
-          {run.pagesDone} / {run.maxPages}
-        </dd>
-        <dt class="text-slate-500 dark:text-slate-400">{t.jobsProgress}</dt>
-        <dd>
-          {run.done + run.errors} {t.of} {run.total}
-        </dd>
-        <dt class="text-slate-500 dark:text-slate-400">{t.duplicatesSkipped}</dt>
-        <dd>{run.skipped}</dd>
-        <dt class="text-slate-500 dark:text-slate-400">{t.errors}</dt>
-        <dd class={run.errors ? 'text-rose-700 dark:text-rose-400' : ''}>{run.errors}</dd>
-      </dl>
-
-      {run.phase === 'details' && (
-        <div class="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-          <div class="h-full bg-teal-600 transition-all" style={{ width: `${percent}%` }} />
+      <div>
+        <div class="mb-1 flex justify-between text-xs text-slate-600 dark:text-slate-300">
+          <span>
+            {run.phase === 'details'
+              ? fmt(t.readingJobs, {
+                  n: n(Math.min(processed + 1, run.total)),
+                  total: n(run.total),
+                })
+              : fmt(t.findingJobs, { n: run.pagesDone + 1 })}
+          </span>
+          {run.phase === 'details' && run.total > 0 && run.status === 'running' && (
+            <span>
+              {fmt(t.timeLeft, { t: formatDuration(remainingMs / 1000, settings.language) })}
+            </span>
+          )}
         </div>
+        <div class="h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+          {run.phase === 'details' ? (
+            <div
+              class="h-full rounded-full bg-teal-600 transition-all duration-500"
+              style={{ width: `${percent}%` }}
+            />
+          ) : (
+            <div class="progress-indeterminate h-full w-full rounded-full bg-teal-500" />
+          )}
+        </div>
+      </div>
+
+      {run.currentTitle && run.status === 'running' && (
+        <p class="truncate text-xs" title={run.currentTitle}>
+          <span class="text-slate-500 dark:text-slate-400">{t.reading}: </span>
+          <span class="font-medium">{run.currentTitle}</span>
+        </p>
       )}
 
-      {run.current && (
-        <div class="text-xs">
-          <span class="text-slate-500 dark:text-slate-400">{t.current}: </span>
-          <span class="break-all">{run.current}</span>
-        </div>
-      )}
-      {run.errors > 0 && run.lastError && run.status !== 'error' && (
-        <p class="text-[11px] break-all text-rose-700 dark:text-rose-400">{run.lastError}</p>
-      )}
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <Stat
+          label={t.collected}
+          value={n(run.done)}
+          tone="text-emerald-700 dark:text-emerald-400"
+        />
+        <Stat
+          label={t.skippedSaved}
+          value={n(run.skipped)}
+          tone="text-slate-700 dark:text-slate-200"
+        />
+        <Stat
+          label={t.unreadable}
+          value={n(run.errors)}
+          tone="text-amber-700 dark:text-amber-400"
+        />
+      </div>
 
       <div class="flex gap-2">
         {run.status === 'running' && (
           <button class="btn flex-1" onClick={() => void act('pause')}>
-            {t.pause}
+            ⏸ {t.pause}
           </button>
         )}
-        {canResume && (
+        {canContinue && (
           <button class="btn btn-primary flex-1" onClick={() => void act('resume')}>
-            {t.resume}
+            ▶ {t.continue}
           </button>
         )}
         <button class="btn btn-danger" onClick={() => void act('cancel')}>
-          {t.cancel}
+          ■ {t.stop}
         </button>
       </div>
+
+      {run.status === 'running' && (
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">{t.keepRunning}</p>
+      )}
+
+      {(run.lastError || run.current) && (
+        <div class="text-[11px]">
+          <button
+            class="text-slate-500 underline-offset-2 hover:underline dark:text-slate-400"
+            onClick={() => setShowDetails(!showDetails)}
+          >
+            {showDetails ? t.hideDetails : t.details}
+          </button>
+          {showDetails && (
+            <pre class="mt-1 max-h-32 overflow-auto rounded bg-slate-100 p-2 font-mono break-all whitespace-pre-wrap text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+              {[run.current, run.lastError].filter(Boolean).join('\n')}
+            </pre>
+          )}
+        </div>
+      )}
     </section>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div class="rounded-lg bg-slate-50 p-2 dark:bg-slate-900">
+      <div class={`text-lg font-semibold tabular-nums ${tone}`}>{value}</div>
+      <div class="text-[11px] text-slate-500 dark:text-slate-400">{label}</div>
+    </div>
   );
 }

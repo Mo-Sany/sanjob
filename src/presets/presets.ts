@@ -50,6 +50,10 @@ export const PRESETS: SitePreset[] = [
       ],
       pageParam: { name: 'start', step: 10, first: 0 },
       ready: ['a[data-jk]', '#mosaic-provider-jobcards', '.jobsearch-NoResult-messageContainer'],
+      total: [
+        '[data-testid="jobsearch-JobCountAndSortPane-jobCount"]',
+        '.jobsearch-JobCountAndSortPane-jobCount',
+      ],
     },
     detail: {
       ready: [
@@ -169,6 +173,7 @@ export const PRESETS: SitePreset[] = [
         '[data-occludable-job-id]',
         '.jobs-search-no-results-banner',
       ],
+      total: ['.jobs-search-results-list__subtitle', '.results-context-header__job-count'],
     },
     detail: {
       ready: [

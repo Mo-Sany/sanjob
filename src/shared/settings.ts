@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: Settings = {
   windowMode: 'minimized',
   cvText: '',
   claudeMode: 'clipboard',
+  exportAppend: true,
 };
 
 function navigatorLanguage(): Settings['language'] {
@@ -42,6 +43,7 @@ export function sanitizeSettings(s: Partial<Settings>): Settings {
     windowMode: merged.windowMode === 'normal' ? 'normal' : 'minimized',
     cvText: String(merged.cvText ?? ''),
     claudeMode: 'clipboard',
+    exportAppend: merged.exportAppend !== false,
   };
 }
 

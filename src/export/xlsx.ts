@@ -25,6 +25,10 @@ export const COLUMNS: Array<{ key: keyof JobData; maxWidth: number }> = [
   { key: 'contractType', maxWidth: 25 },
   { key: 'url', maxWidth: 45 },
   { key: 'description', maxWidth: 100 },
+  { key: 'tasks', maxWidth: 70 },
+  { key: 'profile', maxWidth: 70 },
+  { key: 'offer', maxWidth: 60 },
+  { key: 'other', maxWidth: 60 },
 ];
 
 export const HEADERS: Record<Language, Record<keyof JobData, string>> = {
@@ -37,6 +41,10 @@ export const HEADERS: Record<Language, Record<keyof JobData, string>> = {
     contractType: 'Contract type',
     url: 'URL',
     description: 'Description',
+    tasks: 'Your tasks',
+    profile: 'Your profile',
+    offer: 'We offer',
+    other: 'Other',
   },
   de: {
     title: 'Titel',
@@ -47,6 +55,10 @@ export const HEADERS: Record<Language, Record<keyof JobData, string>> = {
     contractType: 'Vertragsart',
     url: 'URL',
     description: 'Beschreibung',
+    tasks: 'Ihre Aufgaben',
+    profile: 'Ihr Profil',
+    offer: 'Wir bieten',
+    other: 'Sonstiges',
   },
 };
 

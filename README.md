@@ -18,15 +18,20 @@ other sites.
 
 ### What it does
 
-1. Open a job search results page and click **Start** in the Sanjob side panel.
+1. Open a job search results page. The side panel reads it right away and shows a summary
+   ("XING detected · 20 jobs on this page · about 360 jobs in total · 18 pages · ~30 min",
+   plus how many of them you already collected). Click **Start collecting**, **Only this page**
+   or **Choose list manually**.
 2. Sanjob opens a separate (minimized) window and goes through the result pages (next-page link
    or `page`/`start` URL parameter) until the last page or your page limit, collecting every job
    link.
 3. It opens each job, one at a time with a random 3–6 s pause, and reads Title, Company,
    Location, Date posted, Salary, Contract type, URL and the full Description. Structured data
    (schema.org `JobPosting` JSON-LD) is preferred; CSS selectors are the fallback.
-4. You see live progress (X of N, current job, errors) and a table you can sort, search and
-   delete rows from.
+4. You see live progress (progress bar, current job, collected / skipped counts, time left, also
+   on the toolbar badge, e.g. `45/360`) and a table you can sort, search and delete rows from.
+   You can switch tabs or close the side panel – the run continues. A notification tells you
+   when it is finished ("Fertig! 312 Jobs gesammelt").
 5. **Export .xlsx** writes one sheet with all jobs as an Excel Table: header row, frozen header,
    auto column widths, wrapped text with a capped row height, clickable URLs.
 
@@ -49,8 +54,9 @@ npm run build
 
 ### Usage
 
-- **Start / Pause / Resume / Cancel** – the collection runs in its own window so you can keep
-  working. Closing that window pauses the run.
+- **Start / Pause / Continue / Stop** – the whole run is driven by the background service worker.
+  Job pages load in an inactive tab of a separate window, never in your own tabs, so switching
+  tabs does not pause anything. Closing that window pauses the run.
 - **Resume after a restart** – queue and results are stored in IndexedDB. If the browser was
   closed during a run, the side panel shows _Interrupted_ with a **Resume** button and continues
   where it stopped.
@@ -63,7 +69,11 @@ npm run build
 - **Append to previous results** (next to Export) – on: export all stored jobs; off: export only
   the latest collection.
 - **Generic mode** – on any other site, Sanjob asks for permission to read that one site, then
-  either **auto-detects** repeating job cards or lets you **pick a job card** with the mouse.
+  **auto-detects** the repeating job cards.
+- **Choose list manually** – move the mouse over the page: the job list under the cursor is
+  outlined in green (each item dashed) with a label such as "List with 20 items found – click to
+  select". Click to select it, Esc to cancel. The largest meaningful list wins over small inner
+  lists; "Smart detection" means Sanjob is confident.
 - **Match with my CV** – paste your CV/skills once in Settings. Select jobs (or use ✦ on a row)
   and click **Match with my CV**: a ready-made prompt (instructions + CV + job data) asking for a
   0–100 match score, matching skills, missing skills and a one-line verdict is copied to the
@@ -72,7 +82,9 @@ npm run build
 
 ### Data columns
 
-`Title | Company | Location | Date posted | Salary | Contract type | URL | Description`
+`Title | Company | Location | Date posted | Salary | Contract type | URL | Description | Ihre Aufgaben | Ihr Profil | Wir bieten | Sonstiges`
+
+(With English UI the last four headers read _Your tasks, Your profile, We offer, Other_.)
 
 - Missing fields stay empty – Sanjob never invents values.
 - _Date posted_ is normalized to `YYYY-MM-DD` (also relative dates like "vor 3 Tagen", "Heute",
@@ -80,6 +92,12 @@ npm run build
 - _Description_ is the full text of the posting as shown on the page (not split into sections).
   If a page has no readable description element, the JSON-LD description is used.
 - Cells longer than 32,000 characters are cut and end with ` [truncated]`.
+- **Sections** (rule-based, no AI): the description is split by its headings (h2/h3/h4,
+  bold lines, lines ending with ":", ALL-CAPS lines) into _Ihre Aufgaben_, _Ihr Profil_ and
+  _Wir bieten_. Text under any other heading (or before the first one) goes to _Sonstiges_.
+  Bullet points become `• item` lines. If no known heading exists, the four columns stay empty.
+  The heading synonyms (German + English) are in
+  [`src/sections/sections.config.ts`](src/sections/sections.config.ts) – add your own there.
 
 ### Fixing a site preset
 
@@ -166,6 +184,7 @@ _Applies to the Sanjob browser extension._
   it into claude.ai. No API key is requested or stored.
 - **Permissions:** `storage` (settings), `sidePanel` (UI), `tabs` + `scripting` + `activeTab`
   (open job pages in the collection window and read them), `alarms` (keep the collection running),
+  `notifications` (the "finished" message),
   host access to StepStone, Indeed, LinkedIn and XING, and – only after you agree – to other
   single sites in generic mode.
 - **Deletion:** delete rows in the table, use **Clear history**, or remove the extension to
@@ -178,7 +197,10 @@ _Applies to the Sanjob browser extension._
 
 ### Was Sanjob macht
 
-1. Öffne eine Ergebnisseite einer Jobsuche und klicke im Sanjob-Seitenbereich auf **Start**.
+1. Öffne eine Ergebnisseite einer Jobsuche. Der Seitenbereich liest sie sofort und zeigt eine
+   Zusammenfassung („XING erkannt · 20 Jobs auf dieser Seite · ca. 360 Jobs insgesamt ·
+   18 Seiten · ~30 min“, dazu wie viele du schon gesammelt hast). Klicke auf **Sammeln starten**,
+   **Nur diese Seite** oder **Liste selbst wählen**.
 2. Sanjob öffnet ein eigenes (minimiertes) Fenster und blättert durch die Ergebnisseiten
    („Weiter“-Link oder `page`/`start`-Parameter) bis zur letzten Seite oder deinem Seitenlimit
    und sammelt alle Job-Links.
@@ -211,8 +233,11 @@ npm run build
 
 ### Bedienung
 
-- **Start / Pause / Fortsetzen / Abbrechen** – das Sammeln läuft in einem eigenen Fenster, du
-  kannst weiterarbeiten. Wird das Fenster geschlossen, pausiert der Lauf.
+- **Start / Pause / Weiter / Stoppen** – der Lauf wird komplett vom Hintergrund-Service-Worker
+  gesteuert. Stellenseiten laden in einem inaktiven Tab eines eigenen Fensters, nie in deinen
+  Tabs – Tabwechsel unterbrechen nichts. Fortschritt steht auch am Symbol (z. B. `45/360`), am
+  Ende kommt eine Benachrichtigung („Fertig! 312 Jobs gesammelt“). Wird das Fenster
+  geschlossen, pausiert der Lauf.
 - **Fortsetzen nach Neustart** – Warteschlange und Ergebnisse liegen in IndexedDB. Wurde der
   Browser während eines Laufs geschlossen, zeigt Sanjob _Unterbrochen_ und **Fortsetzen**.
 - **CAPTCHA / Anmeldung / Sperrseite** – Sanjob stoppt, holt das Fenster nach vorne und zeigt
@@ -224,7 +249,10 @@ npm run build
 - **An frühere Ergebnisse anhängen** (beim Export) – an: alle gespeicherten Jobs; aus: nur die
   letzte Sammlung.
 - **Generischer Modus** – auf anderen Seiten fragt Sanjob nach der Berechtigung für genau diese
-  Seite und erkennt Stellenkarten automatisch oder per Klick (**Stellenkarte auswählen**).
+  Seite und erkennt die Stellenkarten automatisch.
+- **Liste selbst wählen** – beim Bewegen der Maus wird die Jobliste unter dem Zeiger grün
+  umrandet (jeder Eintrag gestrichelt), dazu „Liste mit 20 Einträgen gefunden – klicken zum
+  Auswählen“. Klick wählt aus, Esc bricht ab.
 - **Mit meinem Lebenslauf abgleichen** – Lebenslauf einmal in den Einstellungen einfügen, Jobs
   auswählen (oder ✦ in einer Zeile) – ein fertiger Prompt mit Match-Score 0–100, passenden und
   fehlenden Fähigkeiten und einem Fazit wird kopiert. In [claude.ai](https://claude.ai)
@@ -233,11 +261,15 @@ npm run build
 
 ### Spalten
 
-`Titel | Unternehmen | Ort | Veröffentlicht | Gehalt | Vertragsart | URL | Beschreibung`
+`Titel | Unternehmen | Ort | Veröffentlicht | Gehalt | Vertragsart | URL | Beschreibung | Ihre Aufgaben | Ihr Profil | Wir bieten | Sonstiges`
 
 Fehlende Werte bleiben leer. Das Datum wird nach `JJJJ-MM-TT` umgewandelt (auch „vor 3 Tagen“,
 „Heute“, „2 days ago“); ist das nicht eindeutig möglich, bleibt der Originaltext stehen. Die
-Beschreibung ist der vollständige Anzeigentext. Zellen über 32.000 Zeichen werden gekürzt und
+Beschreibung ist der vollständige Anzeigentext. Zusätzlich wird die Beschreibung regelbasiert (ohne KI) anhand
+ihrer Überschriften in **Ihre Aufgaben**, **Ihr Profil**, **Wir bieten** und **Sonstiges**
+aufgeteilt; Aufzählungen erscheinen als `• Punkt`. Ohne bekannte Überschrift bleiben diese vier
+Spalten leer. Die Überschriften-Synonyme stehen in
+[`src/sections/sections.config.ts`](src/sections/sections.config.ts). Zellen über 32.000 Zeichen werden gekürzt und
 enden mit ` [truncated]`.
 
 ### Ein Seiten-Preset reparieren
@@ -276,6 +308,7 @@ Alle seitenspezifischen Selektoren stehen in **einer Datei:
 - **Weitergabe:** keine. Daten verlassen den Browser nur, wenn du selbst eine Excel-Datei
   exportierst oder einen Prompt in die Zwischenablage kopierst.
 - **Berechtigungen:** `storage`, `sidePanel`, `tabs`, `scripting`, `activeTab`, `alarms`,
+  `notifications`,
   Zugriff auf StepStone, Indeed, LinkedIn und XING sowie – nur nach deiner Zustimmung – auf
   einzelne weitere Seiten im generischen Modus.
 - **Löschen:** Zeilen in der Tabelle löschen, **Verlauf löschen** oder die Erweiterung

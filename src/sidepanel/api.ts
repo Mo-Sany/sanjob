@@ -1,14 +1,51 @@
 import contentScript from '../content/content-script.ts?iife';
-import type {
-  ContentCommand,
-  ContentResponse,
-  PanelRequest,
-  PanelResponse,
+import {
+  PANEL_PORT,
+  type Broadcast,
+  type ContentCommand,
+  type ContentResponse,
+  type PanelRequest,
+  type PanelResponse,
 } from '../shared/messages';
 
 export async function send(req: PanelRequest): Promise<PanelResponse> {
-  const res = (await chrome.runtime.sendMessage(req)) as PanelResponse | undefined;
-  return res ?? { ok: false, error: 'No response from background' };
+  try {
+    const res = (await chrome.runtime.sendMessage(req)) as PanelResponse | undefined;
+    if (res && !res.ok) console.warn('[Sanjob]', req.type, res.code, res.details);
+    return res ?? { ok: false, code: 'unknown', details: 'no response from the service worker' };
+  } catch (err) {
+    console.warn('[Sanjob]', req.type, err);
+    return { ok: false, code: 'unknown', details: String(err) };
+  }
+}
+
+/**
+ * Subscribes to live updates from the service worker over a long-lived port.
+ * Reconnects automatically when the service worker restarts. Returns an unsubscribe function.
+ */
+export function subscribe(onMessage: (msg: Broadcast) => void): () => void {
+  let port: chrome.runtime.Port | null = null;
+  let closed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const connect = (): void => {
+    if (closed) return;
+    try {
+      port = chrome.runtime.connect({ name: PANEL_PORT });
+      port.onMessage.addListener((m: unknown) => onMessage(m as Broadcast));
+      port.onDisconnect.addListener(() => {
+        port = null;
+        if (!closed) timer = setTimeout(connect, 1000);
+      });
+    } catch {
+      timer = setTimeout(connect, 2000);
+    }
+  };
+  connect();
+  return () => {
+    closed = true;
+    clearTimeout(timer);
+    port?.disconnect();
+  };
 }
 
 export async function activeTab(): Promise<chrome.tabs.Tab | null> {

@@ -1,4 +1,4 @@
-import type { JobData } from '../shared/types';
+import type { JobCore } from '../shared/types';
 import { htmlToText, oneLine } from '../shared/text';
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -140,7 +140,7 @@ function formatEmployment(job: JsonObject): string {
 }
 
 /** Maps a JobPosting object to our columns. Missing values stay ''. */
-export function jobFromJsonLd(job: JsonObject, doc: Document): Omit<JobData, 'url'> {
+export function jobFromJsonLd(job: JsonObject, doc: Document): JobCore {
   const org = asArray(job['hiringOrganization'])[0];
   return {
     title: str(job['title']) || str(job['name']),

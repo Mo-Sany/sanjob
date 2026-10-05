@@ -51,6 +51,8 @@ export interface ListingPreset {
   };
   /** Wait until one of these selectors exists (SPA pages render late). */
   ready: string[];
+  /** Elements showing the total number of results ("360 Jobs"); text search is the fallback. */
+  total?: string[];
 }
 
 export interface DetailPreset {

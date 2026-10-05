@@ -115,37 +115,62 @@ export interface CardGroup {
 }
 
 /**
+ * The best group of similar, link-carrying children of one parent (or null).
+ * Nav menus have short items; job cards have title + company + location, so the score
+ * grows with the number of items and their text length.
+ */
+export function groupForParent(parent: Element): CardGroup | null {
+  if (IGNORED_TAGS.has(parent.tagName) || parent.childElementCount < 3) return null;
+  const children = Array.from(parent.children).filter((c) => !IGNORED_TAGS.has(c.tagName));
+  let bestCluster: Element[] = [];
+  const seen = new Set<Element>();
+  for (const c of children) {
+    if (seen.has(c)) continue;
+    const cluster = children.filter((x) => similar(c, x));
+    cluster.forEach((x) => seen.add(x));
+    if (cluster.length > bestCluster.length) bestCluster = cluster;
+  }
+  if (bestCluster.length < 3) return null;
+  const withLinks = bestCluster.filter((card) => {
+    const a = cardLink(card);
+    return a !== null && oneLine(a.textContent).length >= 5;
+  });
+  if (withLinks.length < 3 || withLinks.length < bestCluster.length * 0.6) return null;
+  const avgText =
+    withLinks.reduce((sum, card) => sum + Math.min(oneLine(card.textContent).length, 600), 0) /
+    withLinks.length;
+  if (avgText < 20) return null;
+  const score = withLinks.length * Math.log(avgText);
+  return { parent, cards: withLinks, selector: selectorForCards(parent, withLinks), score };
+}
+
+/**
  * Sibling-similarity heuristic: the parent whose children are the largest group of similar
  * elements that each contain a link with text is most likely the result list.
  */
 export function detectCardGroups(doc: Document, limit = 5): CardGroup[] {
   const groups: CardGroup[] = [];
   for (const parent of Array.from(doc.body?.querySelectorAll('*') ?? [])) {
-    if (IGNORED_TAGS.has(parent.tagName) || parent.childElementCount < 3) continue;
-    const children = Array.from(parent.children).filter((c) => !IGNORED_TAGS.has(c.tagName));
-    let bestCluster: Element[] = [];
-    const seen = new Set<Element>();
-    for (const c of children) {
-      if (seen.has(c)) continue;
-      const cluster = children.filter((x) => similar(c, x));
-      cluster.forEach((x) => seen.add(x));
-      if (cluster.length > bestCluster.length) bestCluster = cluster;
-    }
-    if (bestCluster.length < 3) continue;
-    const withLinks = bestCluster.filter((card) => {
-      const a = cardLink(card);
-      return a !== null && oneLine(a.textContent).length >= 5;
-    });
-    if (withLinks.length < 3 || withLinks.length < bestCluster.length * 0.6) continue;
-    const avgText =
-      withLinks.reduce((sum, card) => sum + Math.min(oneLine(card.textContent).length, 600), 0) /
-      withLinks.length;
-    if (avgText < 20) continue;
-    // Nav menus have short items; job cards have title + company + location.
-    const score = withLinks.length * Math.log(avgText);
-    groups.push({ parent, cards: withLinks, selector: selectorForCards(parent, withLinks), score });
+    const g = groupForParent(parent);
+    if (g) groups.push(g);
   }
   return groups.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/**
+ * The repeating list around a hovered element. All lists that contain the element are
+ * considered and the "smart" one wins: the largest meaningful group of cards, not a tiny
+ * inner list (e.g. the tags inside one card).
+ */
+export function findListAround(el: Element): CardGroup | null {
+  let best: CardGroup | null = null;
+  let cur: Element | null = el;
+  while (cur && cur.parentElement && cur.tagName !== 'BODY' && cur.tagName !== 'HTML') {
+    const g = groupForParent(cur.parentElement);
+    if (g && g.cards.includes(cur) && (!best || g.score > best.score)) best = g;
+    cur = cur.parentElement;
+  }
+  return best;
 }
 
 /** From a clicked element, walk up to the first ancestor that repeats among its siblings. */
@@ -183,17 +208,26 @@ export function genericNext(doc: Document): Element | null {
   return null;
 }
 
-/** Generic description: the longest text block among likely containers. */
-export function genericDescription(doc: Document): string {
+/** Generic description container: the element with the longest text among likely candidates. */
+export function genericDescriptionElement(doc: Document): Element | null {
   const candidates = Array.from(
     doc.querySelectorAll(
       '[class*="description" i], [id*="description" i], [class*="job-detail" i], [itemprop="description"], article, main',
     ),
   );
-  let best = '';
+  let best: Element | null = null;
+  let bestLength = 0;
   for (const el of candidates) {
-    const text = elementText(el);
-    if (text.length > best.length) best = text;
+    const length = elementText(el).length;
+    if (length > bestLength) {
+      best = el;
+      bestLength = length;
+    }
   }
   return best;
+}
+
+/** Generic description: the longest text block among likely containers. */
+export function genericDescription(doc: Document): string {
+  return elementText(genericDescriptionElement(doc));
 }

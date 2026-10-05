@@ -60,3 +60,21 @@ export function readFields(
   }
   return out;
 }
+
+/** The element the first successful text rule reads from (used to keep the HTML structure). */
+export function firstMatchingElement(
+  root: ParentNode,
+  rules: FieldRule[] | undefined,
+): Element | null {
+  for (const rule of rules ?? []) {
+    const r = typeof rule === 'string' ? { selector: rule } : rule;
+    if (r.attr || r.all) continue;
+    const match = r.match ? new RegExp(r.match, 'i') : null;
+    for (const el of safeQueryAll(root, r.selector)) {
+      if (r.leaf && el.childElementCount > 0) continue;
+      const text = elementText(el);
+      if (text && (!match || match.test(text))) return el;
+    }
+  }
+  return null;
+}

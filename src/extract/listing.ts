@@ -109,7 +109,8 @@ export function extractListing(input: ListingInput): ListingResult {
     links.push(hints ? { url: canonical, hints } : { url: canonical });
   };
 
-  if (preset) {
+  // A list the user picked manually wins over the preset's link selectors.
+  if (preset && !input.generic) {
     const lp = preset.listing;
     const pattern = lp.jobUrlPattern ? new RegExp(lp.jobUrlPattern, 'i') : null;
     for (const sel of lp.links) {
