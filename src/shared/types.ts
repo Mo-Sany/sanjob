@@ -10,6 +10,11 @@ export interface JobData {
   url: string;
   /** Full raw text of the posting, as on the page. */
   description: string;
+  /**
+   * Text before the first section heading; shown as "Beschreibung" in the export when sections
+   * were found (missing in records collected before this field existed).
+   */
+  intro?: string;
   /** Description sections (empty when the posting has no recognizable headings). */
   tasks: string;
   profile: string;
@@ -17,10 +22,13 @@ export interface JobData {
   other: string;
 }
 
+/** Fields shown as table/Excel columns. */
+export type JobColumn = Exclude<keyof JobData, 'intro'>;
+
 export const SECTION_FIELDS = ['tasks', 'profile', 'offer', 'other'] as const;
 export type SectionField = (typeof SECTION_FIELDS)[number];
 /** The job fields read directly from the page (everything except URL and sections). */
-export type JobCore = Omit<JobData, 'url' | SectionField>;
+export type JobCore = Omit<JobData, 'url' | 'intro' | SectionField>;
 
 export interface JobRecord extends JobData {
   id?: number;
@@ -35,7 +43,7 @@ export type SiteId = 'stepstone' | 'indeed' | 'linkedin' | 'xing' | 'generic';
 
 /** Partial job info visible on a result card; used only to fill fields missing on the detail page. */
 export type JobHints = Partial<
-  Omit<JobData, 'url' | 'description' | 'tasks' | 'profile' | 'offer' | 'other'>
+  Omit<JobData, 'url' | 'description' | 'intro' | 'tasks' | 'profile' | 'offer' | 'other'>
 >;
 
 export interface ListingLink {

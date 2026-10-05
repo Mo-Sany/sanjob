@@ -1,6 +1,12 @@
 import { strFromU8, unzipSync } from 'fflate';
 import * as XLSX from 'xlsx';
-import { MAX_CELL_CHARS, MAX_ROW_HEIGHT_PT, buildXlsx, truncateCell } from '../src/export/xlsx';
+import {
+  MAX_CELL_CHARS,
+  MAX_ROW_HEIGHT_PT,
+  buildXlsx,
+  exportedJob,
+  truncateCell,
+} from '../src/export/xlsx';
 import type { JobData } from '../src/shared/types';
 
 const job = (over: Partial<JobData> = {}): JobData => ({
@@ -79,14 +85,45 @@ describe('xlsx export', () => {
 
   it('writes the four section columns after the description', () => {
     const wb = XLSX.read(
-      buildXlsx([job({ tasks: '• A\n• B', profile: '• C', offer: '• D', other: 'E' })], 'de'),
+      buildXlsx(
+        [job({ intro: 'Intro', tasks: '• A\n• B', profile: '• C', offer: '• D', other: 'E' })],
+        'de',
+      ),
       { type: 'array' },
     );
     const ws = wb.Sheets['Jobs']!;
+    // With sections, "Beschreibung" only holds the intro (no duplicated text).
+    expect((ws['H2'] as XLSX.CellObject).v).toBe('Intro');
     expect((ws['I2'] as XLSX.CellObject).v).toBe('• A\n• B');
     expect((ws['J2'] as XLSX.CellObject).v).toBe('• C');
     expect((ws['K2'] as XLSX.CellObject).v).toBe('• D');
     expect((ws['L2'] as XLSX.CellObject).v).toBe('E');
+  });
+
+  it('keeps the full text in "Beschreibung" when no section was found', () => {
+    const exported = exportedJob(
+      job({ description: 'Nur Text.', intro: '', tasks: '', profile: '', offer: '', other: '' }),
+    );
+    expect(exported.description).toBe('Nur Text.');
+    expect([exported.tasks, exported.profile, exported.offer, exported.other]).toEqual([
+      '',
+      '',
+      '',
+      '',
+    ]);
+  });
+
+  it('splits older records (without intro) again from their description', () => {
+    const exported = exportedJob(
+      job({
+        description: 'Wir sind ein Team.\n\nIhre Aufgaben:\nPlanen\n\nKontakt: a@b.de',
+        tasks: 'alt',
+        other: 'Wir sind ein Team. Ihre Aufgaben: Planen Kontakt: a@b.de',
+      }),
+    );
+    expect(exported.description).toBe('Wir sind ein Team.');
+    expect(exported.tasks).toBe('Planen');
+    expect(exported.other).toBe('Kontakt: a@b.de');
   });
 
   it('formats the data as an Excel Table', () => {

@@ -8,7 +8,8 @@
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import * as XLSX from 'xlsx';
-import type { JobData, Language } from '../shared/types';
+import { splitSections, type JobSections } from '../sections/split';
+import type { JobColumn, JobData, Language } from '../shared/types';
 
 export const MAX_CELL_CHARS = 32000;
 export const TRUNCATED_SUFFIX = ' [truncated]';
@@ -16,7 +17,7 @@ export const TRUNCATED_SUFFIX = ' [truncated]';
 export const MAX_ROW_HEIGHT_PT = 120;
 const LINE_HEIGHT_PT = 15;
 
-export const COLUMNS: Array<{ key: keyof JobData; maxWidth: number }> = [
+export const COLUMNS: Array<{ key: JobColumn; maxWidth: number }> = [
   { key: 'title', maxWidth: 50 },
   { key: 'company', maxWidth: 35 },
   { key: 'location', maxWidth: 30 },
@@ -31,7 +32,7 @@ export const COLUMNS: Array<{ key: keyof JobData; maxWidth: number }> = [
   { key: 'other', maxWidth: 60 },
 ];
 
-export const HEADERS: Record<Language, Record<keyof JobData, string>> = {
+export const HEADERS: Record<Language, Record<JobColumn, string>> = {
   en: {
     title: 'Title',
     company: 'Company',
@@ -100,10 +101,36 @@ export function rowHeight(row: string[], widths: number[]): number {
 const xmlEscape = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/**
+ * The job as exported: when sections were found, "Beschreibung" holds only the intro so that
+ * every text fragment appears in exactly one column. Records collected before the intro
+ * existed are split again from their plain-text description.
+ */
+export function exportedJob(job: JobData): JobData {
+  let parts: JobSections = {
+    intro: job.intro ?? '',
+    tasks: job.tasks,
+    profile: job.profile,
+    offer: job.offer,
+    other: job.other,
+  };
+  const found = (p: JobSections): boolean => Boolean(p.tasks || p.profile || p.offer);
+  if (job.intro === undefined) {
+    const again = splitSections(job.description);
+    // Nothing found in the plain text: keep the record as it was collected.
+    if (!found(again)) return job;
+    parts = again;
+  }
+  if (!found(parts)) return { ...job, tasks: '', profile: '', offer: '', other: '' };
+  return { ...job, ...parts, description: parts.intro };
+}
+
 /** Builds the .xlsx file for the given jobs. */
 export function buildXlsx(jobs: JobData[], lang: Language = 'en'): Uint8Array {
   const headers = COLUMNS.map((c) => HEADERS[lang][c.key]);
-  const rows = jobs.map((job) => COLUMNS.map((c) => truncateCell(cleanXmlChars(job[c.key] ?? ''))));
+  const rows = jobs
+    .map(exportedJob)
+    .map((job) => COLUMNS.map((c) => truncateCell(cleanXmlChars(job[c.key] ?? ''))));
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
   const urlCol = COLUMNS.findIndex((c) => c.key === 'url');

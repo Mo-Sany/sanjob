@@ -114,13 +114,19 @@ policy is [`PRIVACY.md`](PRIVACY.md). Increase `version` in `package.json` for e
 - Missing fields stay empty – Sanjob never invents values.
 - _Date posted_ is normalized to `YYYY-MM-DD` (also relative dates like "vor 3 Tagen", "Heute",
   "2 days ago"); if it cannot be parsed exactly (e.g. "30+ days ago") the original text is kept.
-- _Description_ is the full text of the posting as shown on the page (not split into sections).
-  If a page has no readable description element, the JSON-LD description is used.
+- _Description_ is the full text of the posting as shown on the page. When sections were found,
+  the export shows only the intro there (the text before the first heading), so every part of
+  the text appears in exactly one column. If a page has no readable description element, the
+  JSON-LD description is used.
 - Cells longer than 32,000 characters are cut and end with ` [truncated]`.
-- **Sections** (rule-based, no AI): the description is split by its headings (h2/h3/h4,
-  bold lines, lines ending with ":", ALL-CAPS lines) into _Ihre Aufgaben_, _Ihr Profil_ and
-  _Wir bieten_. Text under any other heading (or before the first one) goes to _Sonstiges_.
-  Bullet points become `• item` lines. If no known heading exists, the four columns stay empty.
+- **Sections** (rule-based, no AI): the description is split by its headings into
+  _Ihre Aufgaben_, _Ihr Profil_ and _Wir bieten_. A heading is a short line (≤ 60 characters)
+  that equals a known phrase, or ends with ":" / "?" (or is an h2/h3/bold line) and contains
+  one ("Zu deinen Aufgaben gehören:", "Warum Firma?"). Headings glued to their text
+  ("Ihre Aufgaben Je nach …") are split. A section ends at the next heading or at a footer line
+  (contact, e-mail, postal code + city, "Ihre Bewerbung", "Noch Fragen?" …); the footer goes to
+  _Sonstiges_. Bullet points become `• item` lines. If no known heading exists, the full text
+  stays in _Description_ and the four columns stay empty.
   The heading synonyms (German + English) are in
   [`src/sections/sections.config.ts`](src/sections/sections.config.ts) – add your own there.
 
@@ -306,10 +312,11 @@ npm run build
 
 Fehlende Werte bleiben leer. Das Datum wird nach `JJJJ-MM-TT` umgewandelt (auch „vor 3 Tagen“,
 „Heute“, „2 days ago“); ist das nicht eindeutig möglich, bleibt der Originaltext stehen. Die
-Beschreibung ist der vollständige Anzeigentext. Zusätzlich wird die Beschreibung regelbasiert (ohne KI) anhand
-ihrer Überschriften in **Ihre Aufgaben**, **Ihr Profil**, **Wir bieten** und **Sonstiges**
-aufgeteilt; Aufzählungen erscheinen als `• Punkt`. Ohne bekannte Überschrift bleiben diese vier
-Spalten leer. Die Überschriften-Synonyme stehen in
+Anzeige wird regelbasiert (ohne KI) anhand ihrer Überschriften in **Ihre Aufgaben**, **Ihr Profil**
+und **Wir bieten** aufgeteilt; Kontakt- und Bewerbungshinweise am Ende landen in **Sonstiges**,
+der Text vor der ersten Überschrift in **Beschreibung** – jeder Textteil steht genau in einer
+Spalte. Aufzählungen erscheinen als `• Punkt`. Ohne bekannte Überschrift steht der vollständige
+Text in **Beschreibung** und die vier Spalten bleiben leer. Die Überschriften-Synonyme stehen in
 [`src/sections/sections.config.ts`](src/sections/sections.config.ts). Zellen über 32.000 Zeichen werden gekürzt und
 enden mit ` [truncated]`.
 

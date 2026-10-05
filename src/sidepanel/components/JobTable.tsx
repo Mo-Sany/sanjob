@@ -3,7 +3,7 @@ import { useMemo, useState } from 'preact/hooks';
 import { getProvider } from '../../claude/provider';
 import { repo } from '../../db/db';
 import { fmt, type Strings } from '../../shared/i18n';
-import { SECTION_FIELDS, type JobData, type JobRecord, type Settings } from '../../shared/types';
+import { SECTION_FIELDS, type JobColumn, type JobRecord, type Settings } from '../../shared/types';
 import type { Notify } from '../App';
 import { exportJobs } from '../exporting';
 import { filterJobs, sortJobs, type SortDir, type SortKey } from '../table';
@@ -19,7 +19,7 @@ interface Props {
   sectionRef: RefObject<HTMLElement | null>;
 }
 
-const VISIBLE: Array<keyof JobData> = [
+const VISIBLE: Array<JobColumn> = [
   'title',
   'company',
   'location',

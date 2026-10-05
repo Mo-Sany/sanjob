@@ -2,22 +2,37 @@
  * Rule-based splitting of a job description into
  * "Ihre Aufgaben" (tasks) / "Ihr Profil" (profile) / "Wir bieten" (offer) / "Sonstiges" (other).
  *
- * Works on the HTML structure: headings (h1–h6), lines that are entirely <strong>/<b>,
- * short lines ending with ":" and ALL-CAPS lines are heading candidates. A heading candidate
- * whose text matches a synonym from sections.config.ts opens that section; any other heading
- * opens "Sonstiges". Text before the first heading also goes to "Sonstiges".
- * If no known heading is found at all, every section stays empty.
+ * A line is a heading when it is short and matches a synonym from sections.config.ts (exactly,
+ * or contained when it ends with ":"/"?" or is an <h1>–<h6>/bold line). Headings glued to
+ * their text ("Ihre Aufgaben Je nach …") are split. Text before the first heading is the
+ * intro ("Beschreibung"); footer lines (contact, e-mail, address, "Ihre Bewerbung") and an
+ * unknown <h2> after the sections start "Sonstiges". Every line lands in exactly one part.
+ * If no known heading is found at all, every part stays empty.
  */
-import { BULLET, SECTION_SYNONYMS, type SectionKey } from './sections.config';
+import {
+  BULLET,
+  FOOTER_MARKERS,
+  SECTION_SYNONYMS,
+  WEAK_SYNONYMS,
+  type SectionKey,
+} from './sections.config';
 
 export interface JobSections {
+  /** Text before the first known heading (what "Beschreibung" shows when sections exist). */
+  intro: string;
   tasks: string;
   profile: string;
   offer: string;
   other: string;
 }
 
-export const EMPTY_SECTIONS: JobSections = { tasks: '', profile: '', offer: '', other: '' };
+export const EMPTY_SECTIONS: JobSections = {
+  intro: '',
+  tasks: '',
+  profile: '',
+  offer: '',
+  other: '',
+};
 
 /** One visual line of the description. */
 export interface Line {
@@ -136,91 +151,175 @@ export function normalizeHeading(text: string): string {
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const MATCHERS: Array<{ key: SectionKey; phrase: string; re: RegExp }> = (
-  Object.entries(SECTION_SYNONYMS) as Array<[SectionKey, string[]]>
-)
-  .flatMap(([key, list]) =>
-    list.map((phrase) => {
-      const p = normalizeHeading(phrase);
-      return { key, phrase: p, re: new RegExp(`(^|[^\\p{L}])${escapeRe(p)}($|[^\\p{L}])`, 'u') };
-    }),
-  )
-  .sort((a, b) => b.phrase.length - a.phrase.length);
+interface Matcher {
+  key: SectionKey;
+  phrase: string;
+  re: RegExp;
+}
 
-/** Section for a heading text, or null if it is not a known heading. */
-export function matchHeading(text: string): SectionKey | null {
-  const n = normalizeHeading(text);
+function matchersFor(source: Record<SectionKey, string[]>): Matcher[] {
+  return (Object.entries(source) as Array<[SectionKey, string[]]>)
+    .flatMap(([key, list]) =>
+      list.map((phrase) => {
+        const p = normalizeHeading(phrase);
+        return { key, phrase: p, re: new RegExp(`(^|[^\\p{L}])${escapeRe(p)}($|[^\\p{L}])`, 'u') };
+      }),
+    )
+    .sort((a, b) => b.phrase.length - a.phrase.length);
+}
+
+const MATCHERS = matchersFor(SECTION_SYNONYMS);
+const WEAK_MATCHERS = matchersFor(WEAK_SYNONYMS);
+const FOOTER_RE = new RegExp(
+  `^(${FOOTER_MARKERS.map((m) => escapeRe(normalizeHeading(m))).join('|')})($|[^\\p{L}])`,
+  'u',
+);
+const EMAIL_RE = /[\w.+-]+@[\w-]+(\.[\w-]+)+/;
+/** German postal code + city ("09456 Annaberg-Buchholz"), not an amount ("45000 Euro"). */
+const POSTAL_RE = /(^|[\s,])\d{5}\s+(?!(Euro|EUR|Mitarbeit|Stunden|Kunden)\b)\p{Lu}\p{L}+/u;
+
+/** "Jetzt als Elektroniker (m/w/d) bewerben »" */
+const APPLY_RE = /^jetzt\s.{0,100}\bbewerben\b/u;
+
+/** Max length of a heading line. */
+const HEADING_MAX = 60;
+
+/**
+ * Section for a heading line, or null if it is no heading.
+ * A heading is short (≤ 60 chars) and either equals a known phrase, or ends with ":" / "?"
+ * (or is structurally a heading, `structural`) and contains a known phrase as whole words.
+ * "Warum <Firma>?" counts as "Wir bieten".
+ */
+export function matchHeading(
+  text: string,
+  structural = false,
+  matchers: Matcher[] = MATCHERS,
+): SectionKey | null {
+  const t = text.trim();
+  if (t.length > HEADING_MAX) return null;
+  const n = normalizeHeading(t);
   if (!n) return null;
-  for (const m of MATCHERS) if (n === m.phrase) return m.key;
-  // Contained phrase: only for short headings, so normal sentences never switch sections.
-  if (n.split(' ').length > 8) return null;
-  for (const m of MATCHERS) if (m.re.test(n)) return m.key;
+  for (const m of matchers) if (n === m.phrase) return m.key;
+  const marked = /[:：?]\s*$/.test(t);
+  if (!marked && !structural) return null;
+  if (matchers === MATCHERS && /^(warum|why)\s/.test(n) && /\?\s*$/.test(t)) return 'offer';
+  for (const m of matchers) if (m.re.test(n)) return m.key;
   return null;
 }
 
-const words = (s: string): number => s.split(/\s+/).filter(Boolean).length;
-
-function isAllCaps(text: string): boolean {
-  const letters = text.replace(/[^\p{L}]/gu, '');
-  return (
-    letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase()
-  );
+/** A known heading glued to its text on one line: "Ihre Aufgaben Je nach Qualifikation…". */
+function gluedHeading(text: string, matchers: Matcher[]): { key: SectionKey; rest: string } | null {
+  const t = text.replace(/^[^\p{L}\p{N}]+/u, '');
+  const lower = t.toLowerCase();
+  for (const m of matchers) {
+    if (!lower.startsWith(m.phrase)) continue;
+    const after = t.slice(m.phrase.length);
+    // "Heading: text" always; "Heading Text" only for "Ihre/Dein … X" noun phrases followed by
+    // a capitalized word, so sentences like "Wir bieten Ihnen …" or "Aufgaben wie …" stay text.
+    const colon = /^\s*[:：]\s*\S/.exec(after);
+    const noun =
+      /^(ihr|ihre|dein|deine|unser|your)\s/.test(m.phrase) && /^\s+[\p{Lu}\p{N}]/u.test(after);
+    if (colon || noun) return { key: m.key, rest: after.replace(/^\s*[:：]?\s*/, '') };
+  }
+  return null;
 }
 
-/** Does this line look like a heading (independent of its wording)? */
-export function isHeadingLike(line: Line): boolean {
-  const t = line.text;
-  if (t.length > 100 || line.bullet) return false;
-  if (line.tag && words(t) <= 12) return true;
-  if (line.strong && words(t) <= 10) return true;
-  if (/[:：]\s*$/.test(t) && t.length <= 70 && words(t) <= 9) return true;
-  if (isAllCaps(t) && words(t) <= 6) return true;
-  return false;
+/** Contact/footer line: ends the current section. */
+export function isFooterLine(text: string): boolean {
+  const n = normalizeHeading(text);
+  return FOOTER_RE.test(n) || APPLY_RE.test(n) || EMAIL_RE.test(text) || POSTAL_RE.test(text);
 }
 
-type Bucket = SectionKey | 'other';
+const isStructural = (line: Line): boolean =>
+  (line.tag || line.strong) && !line.bullet && line.text.length <= HEADING_MAX;
 
-/** Splits description lines into the four sections. */
+type Bucket = SectionKey | 'intro' | 'other';
+
+interface Classified {
+  line: Line;
+  heading: SectionKey | null;
+  weak: SectionKey | null;
+  /** Text after a glued heading (null: the whole line is the heading). */
+  rest: string | null;
+  footer: boolean;
+}
+
+function classify(line: Line): Classified {
+  const structural = isStructural(line);
+  const base = { line, heading: null, weak: null, rest: null, footer: false };
+  if (!line.bullet) {
+    const heading = matchHeading(line.text, structural);
+    if (heading) return { ...base, heading };
+  }
+  if (isFooterLine(line.text)) return { ...base, footer: true };
+  if (line.bullet) return base;
+  const glued = gluedHeading(line.text, MATCHERS);
+  if (glued) return { ...base, heading: glued.key, rest: glued.rest };
+  const weak = matchHeading(line.text, structural, WEAK_MATCHERS);
+  if (weak) return { ...base, weak };
+  const weakGlued = gluedHeading(line.text, WEAK_MATCHERS);
+  if (weakGlued) return { ...base, weak: weakGlued.key, rest: weakGlued.rest };
+  return base;
+}
+
+/**
+ * Splits description lines into intro / tasks / profile / offer / other.
+ * intro = text before the first known heading, other = footer (contact, "Ihre Bewerbung"…)
+ * after the sections. Every line ends up in exactly one bucket.
+ * Without any known heading everything stays empty (the full text is the description).
+ */
 export function splitLines(lines: Line[]): JobSections {
+  const items = lines.map(classify);
+  // Weak headings ("Stellenbeschreibung") only count when nothing else opens that section.
+  const strong = new Set(items.map((c) => c.heading).filter(Boolean));
+  for (const c of items) {
+    if (c.weak && !strong.has(c.weak)) c.heading = c.weak;
+  }
+  if (!items.some((c) => c.heading)) return { ...EMPTY_SECTIONS };
+
   const buckets: Record<Bucket, Array<{ text: string; bullet: boolean; gap: boolean }>> = {
+    intro: [],
     tasks: [],
     profile: [],
     offer: [],
     other: [],
   };
-  let current: Bucket = 'other';
-  let foundKnown = false;
+  let current: Bucket = 'intro';
   let newGroup = false;
-
-  for (const line of lines) {
-    const known = matchHeading(line.text);
-    const headingLike = isHeadingLike(line);
-    // A known heading phrase on its own line counts even without bold/colon ("Ihr Profil").
-    const exactKnown = known !== null && normalizeHeading(line.text).split(' ').length <= 5;
-    if (known && (headingLike || exactKnown)) {
-      current = known;
-      foundKnown = true;
-      newGroup = true;
-      continue;
-    }
-    if (headingLike) {
-      // Unknown heading (e.g. "Über uns"): its text and what follows go to "Sonstiges".
-      current = 'other';
-      buckets.other.push({ text: line.text, bullet: false, gap: true });
-      newGroup = false;
-      continue;
-    }
-    const textBullet = TEXT_BULLET.test(line.text);
+  const push = (text: string, line: Line): void => {
+    const textBullet = TEXT_BULLET.test(text);
     const bullet = line.bullet || textBullet;
-    const text = textBullet ? line.text.replace(TEXT_BULLET, '') : line.text;
-    buckets[current].push({ text, bullet, gap: newGroup || line.gap });
+    buckets[current].push({
+      text: textBullet ? text.replace(TEXT_BULLET, '') : text,
+      bullet,
+      gap: newGroup || line.gap,
+    });
     newGroup = false;
+  };
+
+  for (const c of items) {
+    if (c.heading) {
+      current = c.heading;
+      newGroup = true;
+      if (c.rest) push(c.rest, { ...c.line, bullet: false, gap: true });
+      continue;
+    }
+    if (current !== 'intro') {
+      if (c.footer) {
+        if (current !== 'other') newGroup = true;
+        current = 'other';
+      } else if (c.line.tag && !/[:：]\s*$/.test(c.line.text) && current !== 'other') {
+        // An unknown <h2>/<h3> after the sections ("Über uns", "Kontakt") starts the rest.
+        current = 'other';
+        newGroup = true;
+      }
+    }
+    push(c.line.text, c.line);
   }
 
-  if (!foundKnown) return { ...EMPTY_SECTIONS };
-  const render = (items: (typeof buckets)[Bucket]): string => {
+  const render = (list: (typeof buckets)[Bucket]): string => {
     let out = '';
-    items.forEach((it, i) => {
+    list.forEach((it, i) => {
       const prefix = it.bullet ? BULLET : '';
       if (i > 0) out += it.gap ? '\n\n' : '\n';
       out += prefix + it.text;
@@ -228,6 +327,7 @@ export function splitLines(lines: Line[]): JobSections {
     return out.trim();
   };
   return {
+    intro: render(buckets.intro),
     tasks: render(buckets.tasks),
     profile: render(buckets.profile),
     offer: render(buckets.offer),
