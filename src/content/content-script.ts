@@ -60,7 +60,10 @@ export function waitForContent(selectors: string[], timeoutMs: number): Promise<
 /** Scrolls the page and the main scrollable list so lazy-loaded cards render. */
 async function autoScroll(steps = 8): Promise<void> {
   const scrollables = Array.from(document.querySelectorAll<HTMLElement>('main *, body > div *'))
-    .filter((el) => el.scrollHeight > el.clientHeight + 200 && el.querySelector('a[href]'))
+    .filter(
+      (el) =>
+        el.scrollHeight > el.clientHeight + 200 && el.querySelector('a[href], [role="button"]'),
+    )
     .filter((el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY))
     .slice(0, 3);
   for (let i = 0; i < steps; i++) {
