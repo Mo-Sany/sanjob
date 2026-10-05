@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cvText: '',
   claudeMode: 'clipboard',
   exportAppend: true,
+  liveView: true,
 };
 
 function navigatorLanguage(): Settings['language'] {
@@ -44,6 +45,7 @@ export function sanitizeSettings(s: Partial<Settings>): Settings {
     cvText: String(merged.cvText ?? ''),
     claudeMode: 'clipboard',
     exportAppend: merged.exportAppend !== false,
+    liveView: merged.liveView !== false,
   };
 }
 

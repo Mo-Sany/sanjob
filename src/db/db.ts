@@ -106,6 +106,10 @@ export class Repo {
     });
   }
 
+  async queueItems(runId: string): Promise<QueueItem[]> {
+    return this.d.queue.where('runId').equals(runId).toArray();
+  }
+
   async nextPending(runId: string): Promise<QueueItem | undefined> {
     const items = await this.d.queue
       .where('[runId+status]')

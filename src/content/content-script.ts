@@ -9,6 +9,7 @@ import { detectCardGroups } from '../extract/generic';
 import { clickNext, extractListing } from '../extract/listing';
 import { presetForUrl } from '../presets/presets';
 import { KEEPALIVE_PORT, type ContentCommand, type ContentResponse } from '../shared/messages';
+import { applyLiveUpdate } from './liveview';
 import { startPicker } from './picker';
 
 declare global {
@@ -153,6 +154,9 @@ async function run(cmd: ContentCommand): Promise<ContentResponse> {
     }
     case 'startPicker':
       startPicker(cmd.lang);
+      return { type: 'ok' };
+    case 'live':
+      applyLiveUpdate(cmd.update);
       return { type: 'ok' };
     case 'probe':
       return {

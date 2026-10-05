@@ -95,6 +95,19 @@ export function SettingsView({ t, settings, update, notify }: Props) {
         </select>
       </label>
 
+      <label class="flex items-start gap-2">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={settings.liveView}
+          onChange={() => void update({ liveView: !settings.liveView })}
+        />
+        <span class="flex flex-col">
+          <span class="label">{t.liveView}</span>
+          <span class="text-xs text-slate-500 dark:text-slate-400">{t.liveViewHint}</span>
+        </span>
+      </label>
+
       <label class="flex flex-col gap-1">
         <span class="label">{t.cv}</span>
         <textarea

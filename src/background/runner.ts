@@ -31,6 +31,7 @@ import {
   waitForTabComplete,
   windowExists,
 } from './browser';
+import { followToPage, pushLive } from './live';
 import { notifyDone, publishToPanels, updateBadge } from './ui';
 
 export const KEEPALIVE_ALARM = 'sanjob-keepalive';
@@ -71,6 +72,23 @@ async function patchRun(runId: string, patch: Partial<RunState>): Promise<RunSta
 
 const notice = (key: NoticeKey): RunState['notice'] => ({ key, at: Date.now() });
 
+/** Updates the live view in the user's results tab (fire-and-forget, never blocks the run). */
+async function live(runId: string, action: 'sync' | 'end' = 'sync'): Promise<void> {
+  const state = await repo.getRun();
+  if (!state || state.runId !== runId || state.liveTabId === null) return;
+  const url = await pushLive(state, action);
+  if (url === null) await patchRun(runId, { liveTabId: null, liveUrl: null });
+  else if (url !== state.liveUrl) await patchRun(runId, { liveUrl: url });
+}
+
+/** The user toggled the "Live view" setting. */
+export async function onLiveViewSetting(on: boolean): Promise<void> {
+  const state = await repo.getRun();
+  if (!state || state.liveTabId === null) return;
+  if (on) void live(state.runId);
+  else void pushLive(state, 'clear');
+}
+
 async function keepAlive(on: boolean): Promise<void> {
   if (on) await chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
   else await chrome.alarms.clear(KEEPALIVE_ALARM);
@@ -104,6 +122,7 @@ export async function startRun(
   maxPages: number,
   generic?: GenericConfig,
   siteName?: string,
+  sourceTabId?: number,
 ): Promise<RunState> {
   const existing = await repo.getRun();
   if (existing && ['running', 'paused', 'blocked'].includes(existing.status)) {
@@ -137,6 +156,8 @@ export async function startRun(
     currentTitle: '',
     notice: null,
     avgItemMs: 0,
+    liveTabId: sourceTabId ?? null,
+    liveUrl: sourceTabId === undefined ? null : url,
     windowId,
     tabId,
     block: null,
@@ -163,6 +184,7 @@ export async function pauseRun(): Promise<void> {
   await repo.setRun(next);
   await publish(next);
   await keepAlive(false);
+  void live(next.runId);
 }
 
 export async function resumeRun(): Promise<void> {
@@ -187,7 +209,9 @@ export async function cancelRun(): Promise<void> {
   const cur = await repo.getRun();
   if (!cur) return;
   await repo.setRun(null);
-  await repo.clearQueue(cur.runId);
+  // Stopped: the live view keeps its ✓ marks (with a "Clear marks" button); the queue is
+  // cleared once those marks are drawn.
+  void pushLive(cur, 'end').finally(() => repo.clearQueue(cur.runId));
   await keepAlive(false);
   await closeWindow(cur.windowId);
   await publish(null);
@@ -376,9 +400,11 @@ async function listingStep(state: RunState): Promise<void> {
 
   if (lastPage) {
     await patchRun(state.runId, { ...patch, phase: 'details', pageUrl: null });
+    void live(state.runId);
     await politeDelay(state.runId);
     return;
   }
+  void live(state.runId);
   if (nextIsClick) {
     await politeDelay(state.runId);
     if (!(await stillRunning(state.runId))) return;
@@ -393,7 +419,14 @@ async function listingStep(state: RunState): Promise<void> {
     await patchRun(state.runId, { ...patch, pageUrl: await currentTabUrl(tabId) });
     return;
   }
-  await patchRun(state.runId, { ...patch, pageUrl: nextUrl });
+  // The live tab follows to the next results page (unless the user navigated it elsewhere).
+  const liveUrl = state.liveTabId === null ? null : await followToPage(state, nextUrl);
+  await patchRun(state.runId, {
+    ...patch,
+    pageUrl: nextUrl,
+    liveUrl,
+    liveTabId: liveUrl === null ? null : state.liveTabId,
+  });
   await politeDelay(state.runId);
 }
 
@@ -407,6 +440,7 @@ async function finishRun(state: RunState): Promise<void> {
   await keepAlive(false);
   await closeWindow(state.windowId);
   await patchRun(state.runId, { windowId: null, tabId: null });
+  void live(state.runId, 'end');
   if (done) await notifyDone(done.done, (await loadSettings()).language);
 }
 
@@ -419,6 +453,7 @@ async function detailStep(state: RunState): Promise<void> {
   const startedAt = Date.now();
   const { tabId, windowId } = await ensureTab(state);
   await patchRun(state.runId, { current: item.url, currentTitle: item.hints?.title ?? '' });
+  void live(state.runId);
 
   const { result, problem } = await loadAndRead<DetailResult>(
     state,
@@ -473,6 +508,7 @@ async function detailStep(state: RunState): Promise<void> {
     });
     publishToPanels({ type: 'jobsChanged' });
     broadcast({ type: 'jobsChanged' });
+    void live(state.runId);
   } else {
     await patchRun(state.runId, {
       errors: state.errors + 1,
@@ -482,5 +518,6 @@ async function detailStep(state: RunState): Promise<void> {
       suggestWindowMode,
       avgItemMs,
     });
+    void live(state.runId);
   }
 }

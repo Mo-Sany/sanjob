@@ -137,6 +137,10 @@ export interface RunState {
   avgItemMs: number;
   /** Display name of the site ("XING", "Indeed", host name). */
   siteName: string;
+  /** The user's results tab that shows the live view (null = live view stopped). */
+  liveTabId: number | null;
+  /** The results page the live tab is expected to show. */
+  liveUrl: string | null;
   windowId: number | null;
   tabId: number | null;
   block: BlockInfo | null;
@@ -164,4 +168,24 @@ export interface Settings {
   claudeMode: 'clipboard';
   /** Export: true = all stored jobs, false = only the latest collection. */
   exportAppend: boolean;
+  /** Mark the job cards on the results page while collecting. */
+  liveView: boolean;
+}
+
+/** State of one job card in the live view. */
+export type LiveStatus = 'queued' | 'progress' | 'done' | 'dup' | 'skipped';
+
+export interface LiveUpdate {
+  /** sync = show progress; end = run over (keep ✓ marks); clear = remove everything. */
+  action: 'sync' | 'end' | 'clear';
+  /** [dedupe key, status] for every job of the run. */
+  items: Array<[string, LiveStatus]>;
+  /** Key of the job being read right now. */
+  focus: string | null;
+  done: number;
+  total: number;
+  /** Estimated seconds left (null = unknown). */
+  remainingSec: number | null;
+  language: Language;
+  generic?: GenericConfig;
 }

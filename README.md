@@ -70,6 +70,14 @@ npm run build
   the latest collection.
 - **Generic mode** – on any other site, Sanjob asks for permission to read that one site, then
   **auto-detects** the repeating job cards.
+- **Live view** (Settings, on by default) – while collecting, the results tab where you clicked
+  Start shows the progress on the job cards themselves: a dashed green outline once a job's link
+  is collected, a pulsing border with "Collecting…" while its page is read, a green ✓ when it is
+  saved, gray "Already saved" for duplicates and amber "Skipped" for unreadable jobs. The page
+  scrolls along smoothly (it pauses for 5 s when you scroll yourself), a chip at the bottom right
+  shows "✓ 23 / 360 · ~25 min left" (click it to open the side panel), and the tab follows the run
+  to the next results page unless you navigated it elsewhere. The marks are overlays: they never
+  shift the layout or block clicks. ✓ marks stay until you reload or click **Clear marks**.
 - **Choose list manually** – move the mouse over the page: the job list under the cursor is
   outlined in green (each item dashed) with a label such as "List with 20 items found – click to
   select". Click to select it, Esc to cancel. The largest meaningful list wins over small inner
@@ -250,6 +258,13 @@ npm run build
   letzte Sammlung.
 - **Generischer Modus** – auf anderen Seiten fragt Sanjob nach der Berechtigung für genau diese
   Seite und erkennt die Stellenkarten automatisch.
+- **Live-Ansicht** (Einstellungen, standardmäßig an) – im Ergebnis-Tab, in dem du gestartet
+  hast, siehst du den Fortschritt direkt an den Stellenkarten: grün gestrichelt = Link gesammelt,
+  pulsierender Rahmen mit „Wird gesammelt…“ = wird gerade gelesen, grünes ✓ = gespeichert, grau
+  „Bereits gespeichert“, orange „Übersprungen“. Die Seite scrollt mit (5 s Pause, wenn du selbst
+  scrollst), unten rechts steht „✓ 23 / 360 · noch ~25 min“ (Klick öffnet den Seitenbereich).
+  Die Markierungen verschieben nichts und blockieren keine Klicks; ✓ bleiben bis zum Neuladen
+  oder bis **Markierungen entfernen**.
 - **Liste selbst wählen** – beim Bewegen der Maus wird die Jobliste unter dem Zeiger grün
   umrandet (jeder Eintrag gestrichelt), dazu „Liste mit 20 Einträgen gefunden – klicken zum
   Auswählen“. Klick wählt aus, Esc bricht ab.

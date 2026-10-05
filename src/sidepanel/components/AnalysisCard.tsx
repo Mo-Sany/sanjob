@@ -190,6 +190,7 @@ export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStart
         maxPages,
         generic: generic ?? undefined,
         siteName,
+        sourceTabId: tab?.id,
       });
       if (!res.ok) notify(t.problems[res.code ?? 'unknown'], 'warn');
       else onStarted(res.state ?? null);

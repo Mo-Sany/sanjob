@@ -2,6 +2,7 @@ import { repo } from '../db/db';
 import {
   KEEPALIVE_PORT,
   PANEL_PORT,
+  type OpenPanelRequest,
   type PanelRequest,
   type PanelResponse,
 } from '../shared/messages';
@@ -13,6 +14,7 @@ import {
   cancelRun,
   ensureLoop,
   markInterrupted,
+  onLiveViewSetting,
   onTabClosed,
   onWindowClosed,
   pauseRun,
@@ -76,7 +78,7 @@ async function handle(req: PanelRequest): Promise<PanelResponse> {
     case 'start':
       return {
         ok: true,
-        state: await startRun(req.url, req.maxPages, req.generic, req.siteName),
+        state: await startRun(req.url, req.maxPages, req.generic, req.siteName, req.sourceTabId),
       };
     case 'pause':
       await pauseRun();
@@ -99,6 +101,25 @@ async function handle(req: PanelRequest): Promise<PanelResponse> {
 }
 
 const REQUEST_TYPES = new Set(['start', 'pause', 'resume', 'cancel', 'getState', 'setWindowMode']);
+
+// The live view's progress chip asks to open the side panel (user click on the page).
+chrome.runtime.onMessage.addListener((msg: unknown, sender) => {
+  if (sender.id !== chrome.runtime.id || !sender.tab) return false;
+  if ((msg as OpenPanelRequest | null)?.type !== 'openSidePanel') return false;
+  const windowId = sender.tab.windowId;
+  chrome.sidePanel
+    .open({ windowId })
+    .catch((err: unknown) => console.debug('[Sanjob] side panel not opened', err));
+  return false;
+});
+
+// The "Live view" setting was switched on or off.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes['settings']) return;
+  const before = (changes['settings'].oldValue as { liveView?: boolean } | undefined)?.liveView;
+  const after = (changes['settings'].newValue as { liveView?: boolean } | undefined)?.liveView;
+  if ((before !== false) !== (after !== false)) void onLiveViewSetting(after !== false);
+});
 
 chrome.runtime.onMessage.addListener((msg: unknown, sender, sendResponse) => {
   // Only accept requests from our own extension pages (not from content scripts / websites).

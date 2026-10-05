@@ -94,19 +94,29 @@ export interface ListingInput {
   now?: Date;
 }
 
-/** Collects job links (+ card hints) and the next-page target from a results page. */
-export function extractListing(input: ListingInput): ListingResult {
+export interface ListingCard {
+  /** Canonical job URL. */
+  url: string;
+  /** De-duplication key (same as the queue/history key). */
+  key: string;
+  /** The element that represents the job on the page (card, or the link itself). */
+  card: Element;
+  hints?: JobHints;
+}
+
+/** Every job on a results page with its card element, in document order, without duplicates. */
+export function listingCards(input: ListingInput): ListingCard[] {
   const { doc, pageUrl, preset } = input;
   const now = input.now ?? new Date();
   const seen = new Set<string>();
-  const links: ListingLink[] = [];
-  const add = (url: string | null, hints: JobHints | undefined): void => {
+  const out: ListingCard[] = [];
+  const add = (url: string | null, card: Element, hints: JobHints | undefined): void => {
     if (!url) return;
     const canonical = canonicalJobUrl(url);
     const key = normalizeUrl(canonical);
     if (seen.has(key)) return;
     seen.add(key);
-    links.push(hints ? { url: canonical, hints } : { url: canonical });
+    out.push(hints ? { url: canonical, key, card, hints } : { url: canonical, key, card });
   };
 
   // A list the user picked manually wins over the preset's link selectors.
@@ -118,7 +128,7 @@ export function extractListing(input: ListingInput): ListingResult {
         const url = linkUrl(el, lp, pageUrl);
         if (!url || (pattern && !pattern.test(url))) continue;
         const card = lp.card ? el.closest(lp.card) : null;
-        add(url, hintsFrom(card, lp, now));
+        add(url, card ?? el, hintsFrom(card, lp, now));
       }
     }
   } else {
@@ -129,9 +139,18 @@ export function extractListing(input: ListingInput): ListingResult {
       const a = cardLink(card, input.generic?.linkSelector);
       const url = toAbsolute(a?.getAttribute('href'), pageUrl);
       const title = oneLine(a?.textContent);
-      add(url, title ? { title } : undefined);
+      add(url, card, title ? { title } : undefined);
     }
   }
+  return out;
+}
+
+/** Collects job links (+ card hints) and the next-page target from a results page. */
+export function extractListing(input: ListingInput): ListingResult {
+  const { doc, pageUrl, preset } = input;
+  const links: ListingLink[] = listingCards(input).map(({ url, hints }) =>
+    hints ? { url, hints } : { url },
+  );
 
   const block = detectBlock(doc, pageUrl, preset?.block, links.length > 0);
   const next = links.length

@@ -4,6 +4,7 @@ import type {
   JobHints,
   Language,
   ListingResult,
+  LiveUpdate,
   PageAnalysis,
   RunState,
   SiteId,
@@ -17,6 +18,7 @@ export type ContentCommand =
   | { type: 'analyze'; generic?: GenericConfig }
   | { type: 'detectCards' }
   | { type: 'startPicker'; lang: Language }
+  | { type: 'live'; update: LiveUpdate }
   | { type: 'probe' };
 
 export type ContentResponse =
@@ -30,7 +32,15 @@ export type ContentResponse =
 
 /** Side panel → background. */
 export type PanelRequest =
-  | { type: 'start'; url: string; maxPages: number; generic?: GenericConfig; siteName?: string }
+  | {
+      type: 'start';
+      url: string;
+      maxPages: number;
+      generic?: GenericConfig;
+      siteName?: string;
+      /** The user's results tab, used for the live view. */
+      sourceTabId?: number;
+    }
   | { type: 'pause' }
   | { type: 'resume' }
   | { type: 'cancel' }
@@ -63,3 +73,8 @@ export interface PanelResponse {
 /** Port names. */
 export const PANEL_PORT = 'sanjob-panel';
 export const KEEPALIVE_PORT = 'sanjob-keepalive';
+
+/** Content script (live view chip) → service worker. */
+export interface OpenPanelRequest {
+  type: 'openSidePanel';
+}
