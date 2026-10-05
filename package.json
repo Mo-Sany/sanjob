@@ -11,7 +11,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "icons": "node scripts/build-icons.mjs"
+    "icons": "node scripts/build-icons.mjs",
+    "zip": "npm run build && node scripts/zip.mjs"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^3.0.0",

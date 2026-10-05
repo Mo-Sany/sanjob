@@ -52,6 +52,12 @@ npm run build
 3. Click **Load unpacked** and choose the `dist` folder.
 4. Pin Sanjob and click its icon – the side panel opens.
 
+### Publish to the Chrome Web Store
+
+`npm run zip` builds `sanjob-<version>.zip` for the upload. Store texts (EN/DE), permission
+justifications, privacy answers and graphics are in [`store/`](store/LISTING.md); the privacy
+policy is [`PRIVACY.md`](PRIVACY.md). Increase `version` in `package.json` for every update.
+
 ### Usage
 
 - **Start / Pause / Continue / Stop** – the whole run is driven by the background service worker.
