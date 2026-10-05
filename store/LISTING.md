@@ -121,6 +121,12 @@ data as "collected" only when it leaves the user's device). Then confirm all thr
 
 **Privacy policy URL:** `https://github.com/Mo-Sany/sanjob/blob/main/PRIVACY.md`
 
+## Additional fields (Store listing tab)
+
+- **Official URL:** `None` – it needs a domain you verified in Google Search Console; github.com can't be verified.
+- **Homepage URL:** `https://github.com/Mo-Sany/sanjob`
+- **Support URL:** `https://github.com/Mo-Sany/sanjob/issues`
+
 ## Distribution
 
 - Visibility: start with **Unlisted** (only people with the link can install) – switch to Public later.
