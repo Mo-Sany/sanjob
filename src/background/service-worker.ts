@@ -3,6 +3,7 @@ import {
   KEEPALIVE_PORT,
   PANEL_PORT,
   type OpenPanelRequest,
+  type WatchLinksMessage,
   type PanelRequest,
   type PanelResponse,
 } from '../shared/messages';
@@ -13,13 +14,16 @@ import {
   applyWindowMode,
   cancelRun,
   ensureLoop,
+  finishRunNow,
   markInterrupted,
   onLiveViewSetting,
   onTabClosed,
+  onWatchLinks,
   onWindowClosed,
   pauseRun,
   resumeRun,
   startRun,
+  startWatching,
 } from './runner';
 import { addPanelPort } from './ui';
 
@@ -52,6 +56,16 @@ chrome.windows.onRemoved.addListener((windowId) => {
   void onWindowClosed(windowId);
 });
 
+// Continuous mode: the user moved the watched tab to another page – keep watching there.
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.status !== 'complete') return;
+  void repo.getRun().then((state) => {
+    if (state?.mode === 'continuous' && state.watchTabId === tabId && state.status !== 'done') {
+      void startWatching(state);
+    }
+  });
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   void onTabClosed(tabId);
 });
@@ -78,13 +92,23 @@ async function handle(req: PanelRequest): Promise<PanelResponse> {
     case 'start':
       return {
         ok: true,
-        state: await startRun(req.url, req.maxPages, req.generic, req.siteName, req.sourceTabId),
+        state: await startRun(
+          req.url,
+          req.maxPages,
+          req.generic,
+          req.siteName,
+          req.sourceTabId,
+          req.mode,
+        ),
       };
     case 'pause':
       await pauseRun();
       break;
     case 'resume':
       await resumeRun();
+      break;
+    case 'finish':
+      await finishRunNow();
       break;
     case 'cancel':
       await cancelRun();
@@ -100,11 +124,25 @@ async function handle(req: PanelRequest): Promise<PanelResponse> {
   return { ok: true, state: await repo.getRun() };
 }
 
-const REQUEST_TYPES = new Set(['start', 'pause', 'resume', 'cancel', 'getState', 'setWindowMode']);
+const REQUEST_TYPES = new Set([
+  'start',
+  'pause',
+  'resume',
+  'finish',
+  'cancel',
+  'getState',
+  'setWindowMode',
+]);
 
-// The live view's progress chip asks to open the side panel (user click on the page).
+// Messages from our content script in the user's tab.
 chrome.runtime.onMessage.addListener((msg: unknown, sender) => {
   if (sender.id !== chrome.runtime.id || !sender.tab) return false;
+  const watch = msg as WatchLinksMessage | null;
+  if (watch?.type === 'watchLinks' && sender.tab.id !== undefined && Array.isArray(watch.links)) {
+    void onWatchLinks(sender.tab.id, String(watch.url), watch.links);
+    return false;
+  }
+  // The live view's progress chip asks to open the side panel (user click on the page).
   if ((msg as OpenPanelRequest | null)?.type !== 'openSidePanel') return false;
   const windowId = sender.tab.windowId;
   chrome.sidePanel

@@ -1,15 +1,19 @@
 /**
  * Point-and-click list picker with "smart" list detection.
- * Hovering highlights the whole repeating list (green box) and each item (dashed outline);
- * a label next to the cursor says how many items were found. Click selects, Esc cancels.
- * All overlays live in a closed shadow root with pointer-events: none, so the page layout
- * and its event handlers are not affected.
+ * Hovering highlights the whole job list (green box) and each item (dashed outline); a label
+ * next to the cursor says how many items were found. Click selects, Esc cancels.
+ * On Indeed, XING, LinkedIn and StepStone the site preset defines the list; elsewhere the
+ * sibling-similarity heuristic is used.
  */
-import { detectCardGroups, findListAround, type CardGroup } from '../extract/generic';
+import { listAt, presetList, type JobList } from '../extract/lists';
 import { presetForUrl } from '../presets/presets';
 import type { Language } from '../shared/types';
+import { ListOverlay } from './overlay';
 
-const TEXT: Record<Language, { found: string; smart: string; hint: string; esc: string }> = {
+export const PICKER_TEXT: Record<
+  Language,
+  { found: string; smart: string; hint: string; esc: string }
+> = {
   en: {
     found: 'List with {n} items found – click to select',
     smart: 'Smart detection',
@@ -24,135 +28,59 @@ const TEXT: Record<Language, { found: string; smart: string; hint: string; esc: 
   },
 };
 
-const MAX_ITEM_BOXES = 300;
-
-const STYLE = `
-  :host { all: initial; }
-  .root { position: fixed; inset: 0; pointer-events: none; z-index: 2147483647;
-    font: 13px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .list { position: fixed; border: 2px solid #22c55e; background: rgba(34,197,94,0.10);
-    border-radius: 10px; box-shadow: 0 0 0 4px rgba(34,197,94,0.15);
-    transition: left .12s ease, top .12s ease, width .12s ease, height .12s ease, opacity .12s ease;
-    opacity: 0; }
-  .list.on { opacity: 1; }
-  .item { position: fixed; border: 1px dashed #16a34a; border-radius: 6px;
-    background: rgba(34,197,94,0.04); transition: opacity .12s ease; }
-  .label { position: fixed; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-    max-width: min(480px, calc(100vw - 16px)); padding: 6px 10px; border-radius: 8px;
-    background: #14532d; color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.25);
-    transition: left .08s ease, top .08s ease; }
-  .label .smart { padding: 1px 6px; border-radius: 999px;
-    background: #22c55e; color: #052e16; font-size: 11px; font-weight: 600; }
-  .banner { position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-    padding: 8px 14px; border-radius: 10px; background: #0f172a; color: #fff;
-    box-shadow: 0 4px 14px rgba(0,0,0,.25); }
-`;
-
 let active = false;
 
 export function startPicker(lang: Language): void {
   if (active) return;
   active = true;
-  const t = TEXT[lang];
-  const preset = presetForUrl(location.href);
-  // The page-wide best list, computed once: hovering it shows "Smart detection".
-  const topGroup = detectCardGroups(document, 1)[0] ?? null;
+  const t = PICKER_TEXT[lang];
+  const ctx = { doc: document, url: location.href, preset: presetForUrl(location.href) };
+  let pageList: JobList | null = presetList(ctx);
+  let current: JobList | null = null;
 
-  const host = document.createElement('sanjob-picker');
-  const shadow = host.attachShadow({ mode: 'closed' });
-  shadow.innerHTML = `<style>${STYLE}</style><div class="root"><div class="items"></div><div class="list"></div><div class="label"></div><div class="banner"></div></div>`;
-  document.documentElement.append(host);
-  const listBox = shadow.querySelector<HTMLDivElement>('.list')!;
-  const itemsLayer = shadow.querySelector<HTMLDivElement>('.items')!;
-  const label = shadow.querySelector<HTMLDivElement>('.label')!;
-  shadow.querySelector<HTMLDivElement>('.banner')!.textContent = t.esc;
+  const overlay = new ListOverlay('sanjob-picker');
+  overlay.setBanner(t.esc);
+  overlay.show(null, t.hint);
 
-  let current: CardGroup | null = null;
-  let mouse = { x: 0, y: 0 };
-  let frame = 0;
-
-  const isSmart = (g: CardGroup): boolean => {
-    if (topGroup && topGroup.parent === g.parent) return true;
-    if (!preset) return false;
-    return g.cards.some((card) =>
-      preset.listing.links.some((sel) => {
-        try {
-          return card.matches(sel) || card.querySelector(sel) !== null;
-        } catch {
-          return false;
-        }
-      }),
-    );
-  };
-
-  const place = (el: HTMLElement, r: DOMRect, pad = 0): void => {
-    el.style.left = `${r.left - pad}px`;
-    el.style.top = `${r.top - pad}px`;
-    el.style.width = `${r.width + pad * 2}px`;
-    el.style.height = `${r.height + pad * 2}px`;
-  };
-
-  const render = (): void => {
-    frame = 0;
-    if (current) {
-      listBox.classList.add('on');
-      place(listBox, current.parent.getBoundingClientRect(), 4);
-      const cards = current.cards.slice(0, MAX_ITEM_BOXES);
-      while (itemsLayer.childElementCount < cards.length) {
-        const d = document.createElement('div');
-        d.className = 'item';
-        itemsLayer.append(d);
-      }
-      while (itemsLayer.childElementCount > cards.length) itemsLayer.lastElementChild?.remove();
-      cards.forEach((card, i) =>
-        place(itemsLayer.children[i] as HTMLElement, card.getBoundingClientRect()),
+  const describe = (list: JobList | null): void => {
+    if (!list) overlay.show(null, t.hint);
+    else
+      overlay.show(
+        list.items,
+        t.found.replace('{n}', String(list.items.length)),
+        list.smart ? t.smart : null,
       );
-      const smart = isSmart(current);
-      label.replaceChildren();
-      label.append(document.createTextNode(t.found.replace('{n}', String(current.cards.length))));
-      if (smart) {
-        const badge = document.createElement('span');
-        badge.className = 'smart';
-        badge.textContent = t.smart;
-        label.append(badge);
-      }
-    } else {
-      listBox.classList.remove('on');
-      itemsLayer.replaceChildren();
-      label.textContent = t.hint;
-    }
-    // Label follows the cursor but stays inside the viewport.
-    const lw = label.offsetWidth || 240;
-    const lh = label.offsetHeight || 30;
-    const x = Math.min(mouse.x + 16, window.innerWidth - lw - 8);
-    const y = mouse.y + 18 + lh > window.innerHeight ? mouse.y - lh - 12 : mouse.y + 18;
-    label.style.left = `${Math.max(8, x)}px`;
-    label.style.top = `${Math.max(8, y)}px`;
-  };
-  const schedule = (): void => {
-    if (!frame) frame = requestAnimationFrame(render);
   };
 
   const onMove = (e: MouseEvent): void => {
-    mouse = { x: e.clientX, y: e.clientY };
+    overlay.moveTo(e.clientX, e.clientY);
     const target = e.target instanceof Element ? e.target : null;
-    const found = target && target !== host ? findListAround(target) : null;
-    if (found?.parent !== current?.parent) current = found;
-    schedule();
+    if (!target || target === overlay.element) return;
+    const found = listAt(target, ctx, pageList);
+    if (found?.container !== current?.container || found?.items.length !== current?.items.length) {
+      current = found;
+      describe(current);
+    }
   };
+
+  // Lists that load later (infinite scroll) are picked up.
+  const refresh = setInterval(() => {
+    pageList = presetList(ctx);
+    overlay.schedule();
+  }, 1500);
 
   const finish = (payload: {
     selector: string | null;
     count: number;
     cancelled: boolean;
+    preset?: boolean;
   }): void => {
     document.removeEventListener('mousemove', onMove, true);
     document.removeEventListener('click', onClick, true);
     document.removeEventListener('keydown', onKey, true);
-    window.removeEventListener('scroll', schedule, true);
-    window.removeEventListener('resize', schedule);
-    if (frame) cancelAnimationFrame(frame);
-    host.remove();
+    window.removeEventListener('scroll', onScroll, true);
+    clearInterval(refresh);
+    overlay.destroy();
     active = false;
     void chrome.runtime.sendMessage({ type: 'pickerResult', origin: location.origin, ...payload });
   };
@@ -161,12 +89,16 @@ export function startPicker(lang: Language): void {
     e.preventDefault();
     e.stopPropagation();
     const target = e.target instanceof Element ? e.target : null;
-    const found = current ?? (target ? findListAround(target) : null);
-    finish({
-      selector: found?.selector ?? null,
-      count: found?.cards.length ?? 0,
-      cancelled: false,
-    });
+    const found = current ?? (target ? listAt(target, ctx, pageList) : null);
+    if (found?.fromPreset) {
+      finish({ selector: null, count: found.items.length, cancelled: false, preset: true });
+    } else {
+      finish({
+        selector: found?.selector ?? null,
+        count: found?.items.length ?? 0,
+        cancelled: false,
+      });
+    }
   };
 
   const onKey = (e: KeyboardEvent): void => {
@@ -175,11 +107,10 @@ export function startPicker(lang: Language): void {
       finish({ selector: null, count: 0, cancelled: true });
     }
   };
+  const onScroll = (): void => overlay.schedule();
 
   document.addEventListener('mousemove', onMove, true);
   document.addEventListener('click', onClick, true);
   document.addEventListener('keydown', onKey, true);
-  window.addEventListener('scroll', schedule, true);
-  window.addEventListener('resize', schedule);
-  schedule();
+  window.addEventListener('scroll', onScroll, true);
 }

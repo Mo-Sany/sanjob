@@ -70,16 +70,21 @@ export class Repo {
   /**
    * Adds links to the run's queue.
    * - `duplicates`: URL was collected in an earlier run (history) – stored as "skipped".
+   * - `filtered`: the title filter excludes it – stored as "filtered".
    * - `repeated`: URL is already queued in this run (e.g. a result page shown twice).
+   * Skipped and filtered entries are kept so repeated pages are recognized and the live view
+   * can mark them, but they are never opened.
    */
   async enqueue(
     runId: string,
     links: ListingLink[],
-  ): Promise<{ added: number; duplicates: number; repeated: number }> {
+    isExcluded: (link: ListingLink) => boolean = () => false,
+  ): Promise<{ added: number; duplicates: number; repeated: number; filtered: number }> {
     return this.d.transaction('rw', this.d.queue, this.d.history, async () => {
       let added = 0;
       let duplicates = 0;
       let repeated = 0;
+      let filtered = 0;
       let order = await this.d.queue.where('runId').equals(runId).count();
       for (const link of links) {
         const key = normalizeUrl(link.url);
@@ -87,22 +92,22 @@ export class Repo {
           repeated++;
           continue;
         }
-        // Collected in an earlier run: remember it as "skipped" so a page that only repeats
-        // known links is recognized as a repeat (pagination stop), but never open it again.
         const known = (await this.d.history.get(key)) !== undefined;
+        const excluded = !known && isExcluded(link);
         const item: QueueItem = {
           runId,
           url: link.url,
           key,
-          status: known ? 'skipped' : 'pending',
+          status: known ? 'skipped' : excluded ? 'filtered' : 'pending',
           order: order++,
         };
         if (link.hints) item.hints = link.hints;
         await this.d.queue.add(item);
         if (known) duplicates++;
+        else if (excluded) filtered++;
         else added++;
       }
-      return { added, duplicates, repeated };
+      return { added, duplicates, repeated, filtered };
     });
   }
 
@@ -126,7 +131,7 @@ export class Repo {
     runId: string,
   ): Promise<Record<QueueItem['status'], number> & { total: number }> {
     const items = await this.d.queue.where('runId').equals(runId).toArray();
-    const counts = { pending: 0, done: 0, error: 0, skipped: 0, total: items.length };
+    const counts = { pending: 0, done: 0, error: 0, skipped: 0, filtered: 0, total: items.length };
     for (const it of items) counts[it.status]++;
     return counts;
   }

@@ -16,6 +16,8 @@ export function liveStatus(item: QueueItem, focusKey: string | null): LiveStatus
       return 'skipped';
     case 'skipped':
       return 'dup';
+    case 'filtered':
+      return 'filtered';
     default:
       return item.key === focusKey ? 'progress' : 'queued';
   }

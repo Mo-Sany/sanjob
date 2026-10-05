@@ -6,11 +6,14 @@
 import { isMostlyEmpty } from '../extract/detail';
 import { repo } from '../db/db';
 import { presetForUrl } from '../presets/presets';
-import { loadSettings, randomDelayMs } from '../shared/settings';
+import { excludeMatcher } from '../shared/filter';
+import { excludeKeywordsOf, loadSettings, randomDelayMs } from '../shared/settings';
 import type { ContentCommand, ContentResponse } from '../shared/messages';
 import type {
+  CollectMode,
   DetailResult,
   GenericConfig,
+  ListingLink,
   ListingResult,
   NoticeKey,
   RunState,
@@ -123,6 +126,7 @@ export async function startRun(
   generic?: GenericConfig,
   siteName?: string,
   sourceTabId?: number,
+  requestedMode: CollectMode = 'pages',
 ): Promise<RunState> {
   const existing = await repo.getRun();
   if (existing && ['running', 'paused', 'blocked'].includes(existing.status)) {
@@ -141,7 +145,8 @@ export async function startRun(
   const state: RunState = {
     runId: newRunId(),
     status: 'running',
-    phase: 'listing',
+    // Continuous mode reads the user's own page instead of paging through results.
+    phase: requestedMode === 'continuous' && sourceTabId !== undefined ? 'details' : 'listing',
     site: preset?.id ?? 'generic',
     siteName: siteName || preset?.name || host,
     startUrl: url,
@@ -152,6 +157,11 @@ export async function startRun(
     done: 0,
     errors: 0,
     skipped: 0,
+    filtered: 0,
+    // Continuous mode watches the user's own tab, so it needs that tab.
+    mode: requestedMode === 'continuous' && sourceTabId !== undefined ? 'continuous' : 'pages',
+    watchTabId: requestedMode === 'continuous' ? (sourceTabId ?? null) : null,
+    waiting: false,
     current: url,
     currentTitle: '',
     notice: null,
@@ -173,6 +183,7 @@ export async function startRun(
   await repo.setLastRunId(state.runId);
   await publish(state);
   await keepAlive(true);
+  if (state.mode === 'continuous') await startWatching(state);
   void loop();
   return state;
 }
@@ -383,18 +394,22 @@ async function listingStep(state: RunState): Promise<void> {
     return;
   }
 
-  const { added, duplicates } = await repo.enqueue(state.runId, links);
+  const { added, duplicates, filtered } = await addLinks(state.runId, links);
   const counts = await repo.queueCounts(state.runId);
   const pagesDone = state.pagesDone + 1;
   // Stop at the last page, at the page limit, or when a page only repeats links already
   // seen in this run (some sites show the last page again for out-of-range page numbers).
   const lastPage =
-    !nextUrl || pagesDone >= state.maxPages || links.length === 0 || added + duplicates === 0;
+    !nextUrl ||
+    pagesDone >= state.maxPages ||
+    links.length === 0 ||
+    added + duplicates + filtered === 0;
 
   const patch: Partial<RunState> = {
     pagesDone,
-    total: counts.total - counts.skipped,
+    total: counts.total - counts.skipped - counts.filtered,
     skipped: counts.skipped,
+    filtered: counts.filtered,
   };
   if (links.length === 0 && state.pagesDone === 0) patch.notice = notice('nothingFound');
 
@@ -430,12 +445,67 @@ async function listingStep(state: RunState): Promise<void> {
   await politeDelay(state.runId);
 }
 
+/** Queues links; the title filter marks excluded jobs as "filtered" (never opened). */
+async function addLinks(
+  runId: string,
+  links: ListingLink[],
+): Promise<{ added: number; duplicates: number; filtered: number }> {
+  const isExcluded = excludeMatcher(excludeKeywordsOf(await loadSettings()));
+  return repo.enqueue(runId, links, (link) => isExcluded(link.hints?.title) !== null);
+}
+
+/** "Finish" button: end the run now and show the summary (used in continuous mode). */
+export async function finishRunNow(): Promise<void> {
+  const cur = await repo.getRun();
+  if (!cur || ['done', 'idle'].includes(cur.status)) return;
+  // finishRun only changes the status of a running run; make it running for this moment.
+  if (cur.status !== 'running') await repo.setRun({ ...cur, status: 'running' });
+  await finishRun({ ...cur, status: 'running' });
+}
+
+/** Continuous mode: start (or restart after a navigation) watching the user's tab. */
+export async function startWatching(state: RunState): Promise<void> {
+  if (state.mode !== 'continuous' || state.watchTabId === null) return;
+  try {
+    const res = await runInTab(state.watchTabId, { type: 'watch', generic: state.generic });
+    if (res.type === 'watch') await onWatchLinks(state.watchTabId, res.url, res.links);
+  } catch (err) {
+    console.debug('[Sanjob] watching the page is not possible', err);
+  }
+}
+
+/** Continuous mode: new job links appeared in the watched tab. */
+export async function onWatchLinks(
+  tabId: number,
+  url: string,
+  links: ListingLink[],
+): Promise<void> {
+  const state = await repo.getRun();
+  if (!state || state.mode !== 'continuous' || state.watchTabId !== tabId) return;
+  if (!['running', 'paused', 'blocked'].includes(state.status) || !links.length) return;
+  await addLinks(state.runId, links);
+  const counts = await repo.queueCounts(state.runId);
+  await patchRun(state.runId, {
+    total: counts.total - counts.skipped - counts.filtered,
+    skipped: counts.skipped,
+    filtered: counts.filtered,
+    pagesDone: Math.max(1, state.pagesDone),
+    // The live view follows the watched page, also after the user navigated it.
+    liveUrl: state.liveTabId === tabId ? url : state.liveUrl,
+  });
+  void live(state.runId);
+}
+
 async function finishRun(state: RunState): Promise<void> {
+  if (state.mode === 'continuous' && state.watchTabId !== null) {
+    void runInTab(state.watchTabId, { type: 'unwatch' }).catch(() => undefined);
+  }
   const done = await patchRun(state.runId, {
     status: 'done',
     phase: 'done',
     current: '',
     currentTitle: '',
+    waiting: false,
   });
   await keepAlive(false);
   await closeWindow(state.windowId);
@@ -447,9 +517,18 @@ async function finishRun(state: RunState): Promise<void> {
 async function detailStep(state: RunState): Promise<void> {
   const item = await repo.nextPending(state.runId);
   if (!item || item.id === undefined) {
+    if (state.mode === 'continuous') {
+      // Everything read so far – wait for new jobs to appear while the user scrolls.
+      if (!state.waiting)
+        await patchRun(state.runId, { waiting: true, current: '', currentTitle: '' });
+      const end = Date.now() + 2000;
+      while (Date.now() < end && (await stillRunning(state.runId))) await sleep(500);
+      return;
+    }
     await finishRun(state);
     return;
   }
+  if (state.waiting) await patchRun(state.runId, { waiting: false });
   const startedAt = Date.now();
   const { tabId, windowId } = await ensureTab(state);
   await patchRun(state.runId, { current: item.url, currentTitle: item.hints?.title ?? '' });
@@ -481,8 +560,14 @@ async function detailStep(state: RunState): Promise<void> {
     state.suggestWindowMode ||
     (settings.windowMode === 'minimized' && emptyStreak >= EMPTY_STREAK_HINT);
   const why = problem || 'no job data found on the page';
+  // The title filter also applies to titles only known from the detail page.
+  const excludedBy = result?.job
+    ? excludeMatcher(excludeKeywordsOf(settings))(result.job.title)
+    : null;
 
-  if (result?.job) {
+  if (result?.job && excludedBy) {
+    await repo.markQueue(item.id, 'filtered', `title contains "${excludedBy}"`);
+  } else if (result?.job) {
     await repo.addJob({
       ...result.job,
       site: state.site,
@@ -498,7 +583,10 @@ async function detailStep(state: RunState): Promise<void> {
   const elapsed = Date.now() - startedAt;
   const avgItemMs = state.avgItemMs ? Math.round(state.avgItemMs * 0.7 + elapsed * 0.3) : elapsed;
 
-  if (result?.job) {
+  if (result?.job && excludedBy) {
+    await patchRun(state.runId, { filtered: state.filtered + 1, avgItemMs });
+    void live(state.runId);
+  } else if (result?.job) {
     await patchRun(state.runId, {
       done: state.done + 1,
       currentTitle: result.job.title,

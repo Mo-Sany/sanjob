@@ -25,6 +25,7 @@ const TEXT: Record<
     progress: string;
     dup: string;
     skipped: string;
+    filtered: string;
     left: (t: string) => string;
     finished: (n: string) => string;
     clear: string;
@@ -35,6 +36,7 @@ const TEXT: Record<
     progress: 'Collecting…',
     dup: 'Already saved',
     skipped: 'Skipped',
+    filtered: 'Filtered out',
     left: (t) => `~${t} left`,
     finished: (n) => `${n} collected`,
     clear: 'Clear marks',
@@ -44,6 +46,7 @@ const TEXT: Record<
     progress: 'Wird gesammelt…',
     dup: 'Bereits gespeichert',
     skipped: 'Übersprungen',
+    filtered: 'Ausgefiltert',
     left: (t) => `noch ~${t}`,
     finished: (n) => `${n} gesammelt`,
     clear: 'Markierungen entfernen',
@@ -60,12 +63,12 @@ const STYLE = `
   .queued { border: 1.5px dashed rgba(34,197,94,.4); }
   .progress { border: 2px solid #22c55e; animation: sj-pulse 1.2s ease-in-out infinite; }
   .done { border: 2px solid #22c55e; background: rgba(34,197,94,.08); }
-  .dup { border: 1.5px solid rgba(100,116,139,.55); }
+  .dup, .filtered { border: 1.5px solid rgba(100,116,139,.55); }
   .skipped { border: 1.5px solid rgba(217,119,6,.7); }
   .badge { position: absolute; top: -10px; right: 10px; display: flex; align-items: center; gap: 5px;
     padding: 2px 8px; border-radius: 999px; color: #fff; background: #16a34a; white-space: nowrap;
     box-shadow: 0 1px 4px rgba(0,0,0,.2); }
-  .dup .badge { background: #64748b; }
+  .dup .badge, .filtered .badge { background: #64748b; }
   .skipped .badge { background: #d97706; }
   .pop { animation: sj-pop .2s ease-out; }
   .spin { width: 8px; height: 8px; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff;
@@ -250,7 +253,7 @@ class LiveView {
       badge.textContent = '✓';
       if (before !== 'done') badge.classList.add('pop');
     } else {
-      badge.textContent = status === 'dup' ? t.dup : t.skipped;
+      badge.textContent = status === 'dup' ? t.dup : status === 'filtered' ? t.filtered : t.skipped;
     }
     view.box.append(badge);
   }

@@ -1,8 +1,10 @@
 import type {
   DetailResult,
   GenericConfig,
+  CollectMode,
   JobHints,
   Language,
+  ListingLink,
   ListingResult,
   LiveUpdate,
   PageAnalysis,
@@ -15,7 +17,16 @@ export type ContentCommand =
   | { type: 'listing'; generic?: GenericConfig; timeoutMs?: number }
   | { type: 'detail'; jobUrl: string; hints?: JobHints; timeoutMs?: number }
   | { type: 'clickNext' }
-  | { type: 'analyze'; generic?: GenericConfig }
+  | { type: 'analyze'; generic?: GenericConfig; exclude?: string[] }
+  | { type: 'watch'; generic?: GenericConfig }
+  | { type: 'unwatch' }
+  | {
+      type: 'hoverPreview';
+      on: boolean;
+      lang: Language;
+      totalResults: number | null;
+      generic?: GenericConfig;
+    }
   | { type: 'detectCards' }
   | { type: 'startPicker'; lang: Language }
   | { type: 'live'; update: LiveUpdate }
@@ -26,6 +37,7 @@ export type ContentResponse =
   | { type: 'detail'; result: DetailResult }
   | { type: 'clickNext'; clicked: boolean }
   | { type: 'analyze'; result: PageAnalysis }
+  | { type: 'watch'; links: ListingLink[]; url: string }
   | { type: 'detectCards'; selector: string | null; count: number }
   | { type: 'probe'; url: string; title: string; site: SiteId }
   | { type: 'ok' };
@@ -40,8 +52,10 @@ export type PanelRequest =
       siteName?: string;
       /** The user's results tab, used for the live view. */
       sourceTabId?: number;
+      mode?: CollectMode;
     }
   | { type: 'pause' }
+  | { type: 'finish' }
   | { type: 'resume' }
   | { type: 'cancel' }
   | { type: 'getState' }
@@ -57,6 +71,8 @@ export type Broadcast =
       selector: string | null;
       count: number;
       cancelled: boolean;
+      /** The site's own job list was picked (use the preset, no custom selector). */
+      preset?: boolean;
     };
 
 /** Problems the UI turns into friendly text (never shown raw). */
@@ -78,3 +94,13 @@ export const KEEPALIVE_PORT = 'sanjob-keepalive';
 export interface OpenPanelRequest {
   type: 'openSidePanel';
 }
+
+/** Content script (continuous mode) → service worker: new job links appeared on the page. */
+export interface WatchLinksMessage {
+  type: 'watchLinks';
+  url: string;
+  links: ListingLink[];
+}
+
+/** Content script (hover preview) ↔ side panel: the preview ends when this port closes. */
+export const HOVER_PORT = 'sanjob-hover';

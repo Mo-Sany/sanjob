@@ -46,7 +46,12 @@ export function SummaryCard({
         </button>
       </div>
       <p class="text-slate-700 dark:text-slate-200">
-        {fmt(t.summaryLine, { c: n(run.done), s: n(run.skipped), u: n(run.errors) })}
+        {fmt(t.summaryLine, {
+          c: n(run.done),
+          s: n(run.skipped),
+          f: n(run.filtered ?? 0),
+          u: n(run.errors),
+        })}
       </p>
       <div class="flex flex-wrap gap-2">
         <button class="btn btn-primary flex-1" onClick={download} disabled={!jobs.length}>

@@ -4,8 +4,15 @@ import { estimateSeconds } from '../../extract/analyze';
 import { presetForUrl } from '../../presets/presets';
 import { fmt, formatDuration, formatNumber, type Strings } from '../../shared/i18n';
 import type { Broadcast } from '../../shared/messages';
-import { loadGenericConfig, saveGenericConfig } from '../../shared/settings';
-import type { GenericConfig, PageAnalysis, RunState, Settings } from '../../shared/types';
+import { FILTER_PRESETS } from '../../shared/filter';
+import { excludeKeywordsOf, loadGenericConfig, saveGenericConfig } from '../../shared/settings';
+import type {
+  CollectMode,
+  GenericConfig,
+  PageAnalysis,
+  RunState,
+  Settings,
+} from '../../shared/types';
 import { normalizeUrl } from '../../shared/url';
 import { activeTab, ensureOriginAccess, originPattern, runInActiveTab, send } from '../api';
 import type { Notify } from '../App';
@@ -13,6 +20,7 @@ import type { Notify } from '../App';
 interface Props {
   t: Strings;
   settings: Settings;
+  update: (patch: Partial<Settings>) => Promise<void>;
   picker: Extract<Broadcast, { type: 'pickerResult' }> | null;
   clearPicker: () => void;
   notify: Notify;
@@ -38,7 +46,15 @@ function hostOf(url: string): string {
  * Reads the active page as soon as the panel opens or the tab changes and shows what
  * Sanjob found there, before anything is started.
  */
-export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStarted }: Props) {
+export function AnalysisCard({
+  t,
+  settings,
+  update,
+  picker,
+  clearPicker,
+  notify,
+  onStarted,
+}: Props) {
   const [tab, setTab] = useState<chrome.tabs.Tab | null>(null);
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [pages, setPages] = useState(settings.maxPages);
@@ -72,7 +88,11 @@ export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStart
     }
     setView({ kind: 'loading' });
     try {
-      const res = await runInActiveTab(target.id, { type: 'analyze', generic: cfg ?? undefined });
+      const res = await runInActiveTab(target.id, {
+        type: 'analyze',
+        generic: cfg ?? undefined,
+        exclude: excludeKeywordsOf(settings),
+      });
       if (my !== seq.current) return;
       if (res?.type !== 'analyze') throw new Error('no analysis');
       const keys = res.result.links.map((l) => normalizeUrl(l));
@@ -135,7 +155,14 @@ export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStart
       setHint('');
       return;
     }
-    if (picker.selector) {
+    if (picker.preset) {
+      // The site's own job list was picked: use the preset (no custom selector needed).
+      void saveGenericConfig(origin, null).then(() => {
+        setGeneric(null);
+        setHint(fmt(t.pickerPicked, { n: picker.count }));
+        void analyze(tab, null);
+      });
+    } else if (picker.selector) {
       const cfg = { cardSelector: picker.selector };
       void saveGenericConfig(origin, cfg).then(() => {
         setGeneric(cfg);
@@ -146,6 +173,41 @@ export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStart
       setHint(t.pickerNothing);
     }
   }, [picker]);
+
+  // A different filter changes the "will be filtered out" count.
+  const filterKey = excludeKeywordsOf(settings).join('|');
+  const firstFilter = useRef(true);
+  useEffect(() => {
+    if (firstFilter.current) {
+      firstFilter.current = false;
+      return;
+    }
+    void analyze(tab, generic);
+  }, [filterKey]);
+
+  // Hover preview: while this card shows a job list, hovering the list on the page
+  // highlights the whole list with its job count.
+  const totalResults = view.kind === 'ready' ? view.analysis.totalResults : null;
+  const previewOn = view.kind === 'ready' && view.analysis.isJobList;
+  useEffect(() => {
+    const tabId = tab?.id;
+    if (!previewOn || tabId === undefined) return;
+    void runInActiveTab(tabId, {
+      type: 'hoverPreview',
+      on: true,
+      lang: settings.language,
+      totalResults,
+      generic: generic ?? undefined,
+    }).catch(() => undefined);
+    return () => {
+      void runInActiveTab(tabId, {
+        type: 'hoverPreview',
+        on: false,
+        lang: settings.language,
+        totalResults: null,
+      }).catch(() => undefined);
+    };
+  }, [previewOn, tab?.id, totalResults, generic?.cardSelector, settings.language]);
 
   const withAccess = async (fn: (tabId: number) => Promise<void>): Promise<boolean> => {
     if (!tab?.id || !isWeb) return false;
@@ -191,6 +253,7 @@ export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStart
         generic: generic ?? undefined,
         siteName,
         sourceTabId: tab?.id,
+        mode: settings.collectMode,
       });
       if (!res.ok) notify(t.problems[res.code ?? 'unknown'], 'warn');
       else onStarted(res.state ?? null);
@@ -257,11 +320,15 @@ export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStart
   }
 
   const avgDelay = (settings.delayMinSec + settings.delayMaxSec) / 2;
+  // Continuous mode reads this one page; page mode visits `pages` result pages.
+  const pagesToVisit = settings.collectMode === 'continuous' ? 1 : pages;
   const plannedJobs = analysis.totalResults
-    ? Math.min(analysis.totalResults, analysis.itemsOnPage * pages)
-    : analysis.itemsOnPage * pages;
-  const newJobs = Math.max(0, plannedJobs - known);
-  const seconds = estimateSeconds(pages, newJobs, avgDelay);
+    ? Math.min(analysis.totalResults, analysis.itemsOnPage * pagesToVisit)
+    : analysis.itemsOnPage * pagesToVisit;
+  // Already collected and filtered-out jobs are never opened.
+  const skippedShare = (known + analysis.excludedOnPage) / Math.max(1, analysis.itemsOnPage);
+  const newJobs = Math.max(0, Math.round(plannedJobs * (1 - Math.min(1, skippedShare))));
+  const seconds = estimateSeconds(pagesToVisit, newJobs, avgDelay);
 
   return (
     <section class="card animate-in flex flex-col gap-3">
@@ -313,27 +380,85 @@ export function AnalysisCard({ t, settings, picker, clearPicker, notify, onStart
       )}
       {hint && <p class="text-xs text-teal-700 dark:text-teal-300">{hint}</p>}
 
-      <label class="flex items-center gap-2 text-xs">
-        <span class="label">{t.pagesToCollect}</span>
-        <input
-          type="number"
-          min={1}
-          max={500}
-          class="input w-20"
-          value={pages}
-          onInput={(e) =>
-            setPages(Math.max(1, Math.min(500, Number((e.target as HTMLInputElement).value) || 1)))
+      <label class="flex flex-wrap items-center gap-2 text-xs">
+        <span class="label">{t.filter}</span>
+        <select
+          class="input"
+          value={settings.filterPreset}
+          onChange={(e) =>
+            void update({
+              filterPreset: (e.target as HTMLSelectElement).value as Settings['filterPreset'],
+            })
           }
-        />
+        >
+          {FILTER_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name[settings.language]}
+            </option>
+          ))}
+          <option value="custom">{t.filterCustom}</option>
+          <option value="off">{t.filterOff}</option>
+        </select>
+        {analysis.excludedOnPage > 0 && (
+          <span class="text-slate-500 dark:text-slate-400">
+            ⛔{' '}
+            {fmt(t.willBeFiltered, {
+              n: n(analysis.excludedOnPage),
+              words: excludeKeywordsOf(settings).slice(0, 4).join(', '),
+            })}
+          </span>
+        )}
       </label>
+
+      <div class="flex flex-col gap-1">
+        <span class="label">{t.modeLabel}</span>
+        <div class="inline-flex self-start rounded-lg border border-slate-300 p-0.5 dark:border-slate-600">
+          {(['pages', 'continuous'] as CollectMode[]).map((m) => (
+            <button
+              key={m}
+              class={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                settings.collectMode === m
+                  ? 'bg-teal-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+              }`}
+              onClick={() => void update({ collectMode: m })}
+            >
+              {m === 'pages' ? t.modePages : t.modeContinuous}
+            </button>
+          ))}
+        </div>
+        <span class="text-[11px] text-slate-500 dark:text-slate-400">
+          {settings.collectMode === 'pages' ? t.modePagesHint : t.modeContinuousHint}
+        </span>
+      </div>
+
+      {settings.collectMode === 'pages' && (
+        <label class="flex items-center gap-2 text-xs">
+          <span class="label">{t.pagesToCollect}</span>
+          <input
+            type="number"
+            min={1}
+            max={500}
+            class="input w-20"
+            value={pages}
+            onInput={(e) =>
+              setPages(
+                Math.max(1, Math.min(500, Number((e.target as HTMLInputElement).value) || 1)),
+              )
+            }
+          />
+        </label>
+      )}
 
       <div class="flex flex-wrap gap-2">
         <button class="btn btn-primary flex-1" disabled={busy} onClick={() => void start(pages)}>
           ▶ {t.startCollecting}
         </button>
-        <button class="btn" disabled={busy} onClick={() => void start(1)}>
-          {t.onlyThisPage}
-        </button>
+        {settings.collectMode === 'pages' && (
+          <button class="btn" disabled={busy} onClick={() => void start(1)}>
+            {t.onlyThisPage}
+          </button>
+        )}
         {manualButton}
       </div>
     </section>

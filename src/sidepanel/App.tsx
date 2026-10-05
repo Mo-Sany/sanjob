@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { repo } from '../db/db';
 import { STRINGS } from '../shared/i18n';
-import type { Broadcast } from '../shared/messages';
+import { HOVER_PORT, type Broadcast } from '../shared/messages';
 import { loadSettings, saveSettings } from '../shared/settings';
 import type { JobRecord, RunState, Settings } from '../shared/types';
 import { send, subscribe } from './api';
@@ -64,6 +64,14 @@ export function App() {
       if (msg.type === 'pickerResult') setPicker(msg);
     };
     chrome.runtime.onMessage.addListener(onMessage);
+    // The page's hover preview stays on while this panel is open (it ends when the port closes).
+    const hoverPorts = new Set<chrome.runtime.Port>();
+    const onConnect = (port: chrome.runtime.Port): void => {
+      if (port.name !== HOVER_PORT) return;
+      hoverPorts.add(port);
+      port.onDisconnect.addListener(() => hoverPorts.delete(port));
+    };
+    chrome.runtime.onConnect.addListener(onConnect);
     const onStorage = (changes: Record<string, chrome.storage.StorageChange>): void => {
       if (changes['settings']) void loadSettings().then(setSettings);
     };
@@ -71,6 +79,8 @@ export function App() {
     return () => {
       unsubscribe();
       chrome.runtime.onMessage.removeListener(onMessage);
+      chrome.runtime.onConnect.removeListener(onConnect);
+      hoverPorts.forEach((p) => p.disconnect());
       chrome.storage.onChanged.removeListener(onStorage);
     };
   }, [reloadJobs]);
@@ -127,6 +137,7 @@ export function App() {
             <AnalysisCard
               t={t}
               settings={settings}
+              update={update}
               picker={picker}
               clearPicker={() => setPicker(null)}
               notify={notify}

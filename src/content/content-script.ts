@@ -9,7 +9,9 @@ import { detectCardGroups } from '../extract/generic';
 import { clickNext, extractListing } from '../extract/listing';
 import { presetForUrl } from '../presets/presets';
 import { KEEPALIVE_PORT, type ContentCommand, type ContentResponse } from '../shared/messages';
+import { startHoverPreview, stopHoverPreview } from './hover';
 import { applyLiveUpdate } from './liveview';
+import { unwatch, watch } from './watch';
 import { startPicker } from './picker';
 
 declare global {
@@ -139,7 +141,13 @@ async function run(cmd: ContentCommand): Promise<ContentResponse> {
       await waitForContent(selectors, 2500);
       return {
         type: 'analyze',
-        result: analyzePage({ doc: document, url: location.href, preset, generic: cmd.generic }),
+        result: analyzePage({
+          doc: document,
+          url: location.href,
+          preset,
+          generic: cmd.generic,
+          exclude: cmd.exclude,
+        }),
       };
     }
     case 'clickNext':
@@ -153,10 +161,28 @@ async function run(cmd: ContentCommand): Promise<ContentResponse> {
       };
     }
     case 'startPicker':
+      stopHoverPreview();
       startPicker(cmd.lang);
       return { type: 'ok' };
     case 'live':
       applyLiveUpdate(cmd.update);
+      return { type: 'ok' };
+    case 'watch': {
+      const selectors = cmd.generic
+        ? [cmd.generic.cardSelector]
+        : (preset?.listing.ready ?? ['a[href]']);
+      await waitForContent(selectors, 8000);
+      return { type: 'watch', links: watch(cmd.generic), url: location.href };
+    }
+    case 'unwatch':
+      unwatch();
+      return { type: 'ok' };
+    case 'hoverPreview':
+      if (cmd.on) {
+        startHoverPreview({ lang: cmd.lang, totalResults: cmd.totalResults, generic: cmd.generic });
+      } else {
+        stopHoverPreview();
+      }
       return { type: 'ok' };
     case 'probe':
       return {

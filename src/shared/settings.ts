@@ -1,3 +1,4 @@
+import { DEFAULT_EXCLUDE, activeKeywords } from './filter';
 import type { GenericConfig, Settings } from './types';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -10,6 +11,9 @@ export const DEFAULT_SETTINGS: Settings = {
   claudeMode: 'clipboard',
   exportAppend: true,
   liveView: true,
+  filterPreset: 'school',
+  excludeKeywords: DEFAULT_EXCLUDE,
+  collectMode: 'pages',
 };
 
 function navigatorLanguage(): Settings['language'] {
@@ -46,6 +50,15 @@ export function sanitizeSettings(s: Partial<Settings>): Settings {
     claudeMode: 'clipboard',
     exportAppend: merged.exportAppend !== false,
     liveView: merged.liveView !== false,
+    excludeKeywords: Array.isArray(merged.excludeKeywords)
+      ? merged.excludeKeywords.map(String).filter((k) => k.trim())
+      : DEFAULT_EXCLUDE,
+    collectMode: merged.collectMode === 'continuous' ? 'continuous' : 'pages',
+    filterPreset: (['school', 'praxissemester', 'custom', 'off'] as const).includes(
+      merged.filterPreset,
+    )
+      ? merged.filterPreset
+      : 'school',
   };
 }
 
@@ -78,4 +91,9 @@ export function randomDelayMs(
   rnd = Math.random,
 ): number {
   return Math.round((s.delayMinSec + rnd() * (s.delayMaxSec - s.delayMinSec)) * 1000);
+}
+
+/** The exclude words that are actually applied (depends on the chosen filter). */
+export function excludeKeywordsOf(s: Pick<Settings, 'filterPreset' | 'excludeKeywords'>): string[] {
+  return activeKeywords(s.filterPreset, s.excludeKeywords);
 }

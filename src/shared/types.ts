@@ -85,12 +85,14 @@ export interface PageAnalysis {
   links: string[];
   /** A preset or a clear repeating list was found ("Smart detection"). */
   confident: boolean;
+  /** Jobs on this page the title filter will skip. */
+  excludedOnPage: number;
 }
 
 /** Friendly status messages shown in the progress card. */
 export type NoticeKey = 'retrying' | 'skipped' | 'nothingFound' | 'noResponse';
 
-export type QueueStatus = 'pending' | 'done' | 'error' | 'skipped';
+export type QueueStatus = 'pending' | 'done' | 'error' | 'skipped' | 'filtered';
 
 export interface QueueItem {
   id?: number;
@@ -104,6 +106,8 @@ export interface QueueItem {
 }
 
 export type RunPhase = 'idle' | 'listing' | 'details' | 'done';
+/** pages = go through numbered result pages; continuous = watch one (infinite) page. */
+export type CollectMode = 'pages' | 'continuous';
 export type RunStatus =
   'idle' | 'running' | 'paused' | 'blocked' | 'interrupted' | 'done' | 'error';
 
@@ -128,6 +132,13 @@ export interface RunState {
   done: number;
   errors: number;
   skipped: number;
+  /** Jobs skipped by the title filter (e.g. "Schülerpraktikum"). */
+  filtered: number;
+  mode: CollectMode;
+  /** Continuous mode: the user's tab that is watched for new jobs. */
+  watchTabId: number | null;
+  /** Continuous mode: all jobs read, waiting for new ones to appear on the page. */
+  waiting: boolean;
   current: string;
   /** Title of the job being read (from the result card or the page). */
   currentTitle: string;
@@ -170,10 +181,19 @@ export interface Settings {
   exportAppend: boolean;
   /** Mark the job cards on the results page while collecting. */
   liveView: boolean;
+  /** Which title filter is active (a ready-made one, the custom list, or off). */
+  filterPreset: 'school' | 'praxissemester' | 'custom' | 'off';
+  /**
+   * The user's own exclude words (used when filterPreset = 'custom'). Use
+   * activeKeywords(settings) to get the words that are actually applied.
+   */
+  excludeKeywords: string[];
+  /** Last chosen collection mode. */
+  collectMode: CollectMode;
 }
 
 /** State of one job card in the live view. */
-export type LiveStatus = 'queued' | 'progress' | 'done' | 'dup' | 'skipped';
+export type LiveStatus = 'queued' | 'progress' | 'done' | 'dup' | 'skipped' | 'filtered';
 
 export interface LiveUpdate {
   /** sync = show progress; end = run over (keep ✓ marks); clear = remove everything. */

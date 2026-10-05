@@ -32,7 +32,7 @@ export function ProgressCard({ t, run, settings, notify }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  const act = async (type: 'pause' | 'resume' | 'cancel'): Promise<void> => {
+  const act = async (type: 'pause' | 'resume' | 'cancel' | 'finish'): Promise<void> => {
     if (type === 'cancel' && !confirm(t.confirmStop)) return;
     const res = await send({ type });
     if (!res.ok) notify(t.problems[res.code ?? 'unknown'], 'warn');
@@ -122,6 +122,12 @@ export function ProgressCard({ t, run, settings, notify }: Props) {
         </div>
       </div>
 
+      {run.waiting && run.status === 'running' && (
+        <p class="animate-in rounded-lg bg-emerald-50 p-2 text-xs text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+          ⬇ {t.waitingNew}
+        </p>
+      )}
+
       {run.currentTitle && run.status === 'running' && (
         <p class="truncate text-xs" title={run.currentTitle}>
           <span class="text-slate-500 dark:text-slate-400">{t.reading}: </span>
@@ -129,7 +135,7 @@ export function ProgressCard({ t, run, settings, notify }: Props) {
         </p>
       )}
 
-      <div class="grid grid-cols-3 gap-2 text-center">
+      <div class="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
         <Stat
           label={t.collected}
           value={n(run.done)}
@@ -138,6 +144,11 @@ export function ProgressCard({ t, run, settings, notify }: Props) {
         <Stat
           label={t.skippedSaved}
           value={n(run.skipped)}
+          tone="text-slate-700 dark:text-slate-200"
+        />
+        <Stat
+          label={t.filteredOut}
+          value={n(run.filtered ?? 0)}
           tone="text-slate-700 dark:text-slate-200"
         />
         <Stat
@@ -156,6 +167,11 @@ export function ProgressCard({ t, run, settings, notify }: Props) {
         {canContinue && (
           <button class="btn btn-primary flex-1" onClick={() => void act('resume')}>
             ▶ {t.continue}
+          </button>
+        )}
+        {run.mode === 'continuous' && (
+          <button class="btn" onClick={() => void act('finish')}>
+            ✓ {t.finish}
           </button>
         )}
         <button class="btn btn-danger" onClick={() => void act('cancel')}>

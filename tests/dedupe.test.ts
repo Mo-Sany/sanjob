@@ -31,9 +31,9 @@ describe('dedupe across runs', () => {
       { url: 'https://de.indeed.com/rc/clk?jk=a&from=serp' },
       { url: 'https://de.indeed.com/viewjob?jk=b' },
     ]);
-    expect(res).toEqual({ added: 2, duplicates: 0, repeated: 1 });
+    expect(res).toEqual({ added: 2, duplicates: 0, repeated: 1, filtered: 0 });
     const again = await repo.enqueue('r1', [{ url: 'https://de.indeed.com/viewjob?jk=b' }]);
-    expect(again).toEqual({ added: 0, duplicates: 0, repeated: 1 });
+    expect(again).toEqual({ added: 0, duplicates: 0, repeated: 1, filtered: 0 });
   });
 
   it('skips URLs collected in an earlier run, until the history is cleared', async () => {
@@ -45,10 +45,10 @@ describe('dedupe across runs', () => {
       { url: 'https://www.example.com/jobs/1/' },
       { url: 'https://example.com/jobs/2' },
     ]);
-    expect(r2).toEqual({ added: 1, duplicates: 1, repeated: 0 });
+    expect(r2).toEqual({ added: 1, duplicates: 1, repeated: 0, filtered: 0 });
 
     const again = await repo.enqueue('r2', [{ url: 'https://example.com/jobs/1' }]);
-    expect(again).toEqual({ added: 0, duplicates: 0, repeated: 1 });
+    expect(again).toEqual({ added: 0, duplicates: 0, repeated: 1, filtered: 0 });
     expect((await repo.queueCounts('r2')).skipped).toBe(1);
     expect((await repo.nextPending('r2'))?.url).toBe('https://example.com/jobs/2');
 
@@ -82,6 +82,7 @@ describe('dedupe across runs', () => {
       done: 1,
       error: 1,
       skipped: 0,
+      filtered: 0,
       total: 3,
     });
   });
@@ -93,5 +94,22 @@ describe('dedupe across runs', () => {
     const [first] = await repo.allJobs();
     await repo.deleteJobs([first!.id!]);
     expect((await repo.allJobs()).map((j) => j.url)).toEqual(['https://e.com/2']);
+  });
+});
+
+describe('title filter in the queue', () => {
+  it('stores excluded jobs as "filtered" and never returns them as pending', async () => {
+    const repo = fresh();
+    const res = await repo.enqueue(
+      'r1',
+      [
+        { url: 'https://e.com/1', hints: { title: 'Schülerpraktikum Mechatronik' } },
+        { url: 'https://e.com/2', hints: { title: 'Praktikant Automatisierung' } },
+      ],
+      (l) => /schüler/i.test(l.hints?.title ?? ''),
+    );
+    expect(res).toEqual({ added: 1, duplicates: 0, repeated: 0, filtered: 1 });
+    expect((await repo.nextPending('r1'))?.url).toBe('https://e.com/2');
+    expect((await repo.queueCounts('r1')).filtered).toBe(1);
   });
 });

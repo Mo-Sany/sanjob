@@ -3,6 +3,7 @@
  * total ("360 Jobs gefunden") and how many result pages.
  */
 import type { SitePreset } from '../presets/types';
+import { excludeMatcher } from '../shared/filter';
 import { oneLine } from '../shared/text';
 import type { GenericConfig, PageAnalysis } from '../shared/types';
 import { detectCardGroups } from './generic';
@@ -83,10 +84,13 @@ export interface AnalyzeInput {
   url: string;
   preset: SitePreset | null;
   generic?: GenericConfig;
+  /** Title filter keywords (to show how many jobs on the page would be skipped). */
+  exclude?: string[];
 }
 
-export function analyzePage({ doc, url, preset, generic }: AnalyzeInput): PageAnalysis {
+export function analyzePage({ doc, url, preset, generic, exclude }: AnalyzeInput): PageAnalysis {
   const listing = extractListing({ doc, pageUrl: url, preset, generic });
+  const isExcluded = excludeMatcher(exclude ?? []);
   const items = listing.links.length;
   const totalResults = items ? readTotalResults(doc, preset, items) : null;
   const pagination = readTotalPages(doc);
@@ -113,6 +117,7 @@ export function analyzePage({ doc, url, preset, generic }: AnalyzeInput): PageAn
     totalPages,
     links: listing.links.map((l) => l.url),
     confident,
+    excludedOnPage: listing.links.filter((l) => isExcluded(l.hints?.title)).length,
   };
 }
 

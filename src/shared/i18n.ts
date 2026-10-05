@@ -41,6 +41,24 @@ const en = {
   pickerNothing: "That didn't look like a list. Try pointing at a single job card.",
   reload: 'Read again',
 
+  // Modes & filter
+  modeLabel: 'How to collect',
+  modePages: 'Page by page',
+  modeContinuous: 'Continuous',
+  modePagesHint: 'Goes through the numbered result pages.',
+  modeContinuousHint:
+    'Reads all jobs on this page; when you scroll down and new jobs appear, they are added.',
+  waitingNew:
+    'All jobs so far are read. Scroll down on the page – new jobs are added automatically.',
+  finish: 'Finish',
+  filteredOut: 'Filtered out',
+  filter: 'Filter',
+  filterOff: 'No filter',
+  filterCustom: 'My own words',
+  filterWords: 'Excluded words in the job title (comma-separated)',
+  filterHint: 'Matches the start of a word: "Schul" skips "Schulbegleiter", not "Hochschule".',
+  willBeFiltered: '{n} will be filtered out ({words})',
+
   // Progress
   status: {
     idle: 'Ready',
@@ -83,7 +101,7 @@ const en = {
   // Summary
   summaryTitle: 'All done 🎉',
   summaryEmpty: 'Finished – no new jobs this time.',
-  summaryLine: '{c} collected · {s} skipped (already saved) · {u} unreadable',
+  summaryLine: '{c} collected · {s} skipped (already saved) · {f} filtered out · {u} unreadable',
   downloadExcel: 'Download Excel',
   openTable: 'Open table',
   newCollection: 'New collection',
@@ -194,6 +212,23 @@ const de: Strings = {
   pickerNothing: 'Das sah nicht nach einer Liste aus. Zeige auf eine einzelne Stellenkarte.',
   reload: 'Neu lesen',
 
+  modeLabel: 'Wie sammeln?',
+  modePages: 'Seite für Seite',
+  modeContinuous: 'Fortlaufend',
+  modePagesHint: 'Geht die nummerierten Ergebnisseiten durch.',
+  modeContinuousHint:
+    'Liest alle Jobs dieser Seite; wenn du nach unten scrollst und neue erscheinen, kommen sie dazu.',
+  waitingNew:
+    'Alle bisherigen Jobs sind gelesen. Scrolle auf der Seite nach unten – neue Jobs kommen automatisch dazu.',
+  finish: 'Fertigstellen',
+  filteredOut: 'Ausgefiltert',
+  filter: 'Filter',
+  filterOff: 'Kein Filter',
+  filterCustom: 'Eigene Wörter',
+  filterWords: 'Ausgeschlossene Wörter im Jobtitel (durch Komma getrennt)',
+  filterHint: 'Passt auf Wortanfänge: „Schul“ überspringt „Schulbegleiter“, nicht „Hochschule“.',
+  willBeFiltered: '{n} werden ausgefiltert ({words})',
+
   status: {
     idle: 'Bereit',
     running: 'Sammelt',
@@ -238,7 +273,8 @@ const de: Strings = {
 
   summaryTitle: 'Fertig 🎉',
   summaryEmpty: 'Fertig – diesmal keine neuen Jobs.',
-  summaryLine: '{c} gesammelt · {s} übersprungen (schon gespeichert) · {u} nicht lesbar',
+  summaryLine:
+    '{c} gesammelt · {s} übersprungen (schon gespeichert) · {f} ausgefiltert · {u} nicht lesbar',
   downloadExcel: 'Excel herunterladen',
   openTable: 'Tabelle öffnen',
   newCollection: 'Neue Sammlung',

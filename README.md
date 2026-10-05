@@ -70,6 +70,17 @@ npm run build
   the latest collection.
 - **Generic mode** – on any other site, Sanjob asks for permission to read that one site, then
   **auto-detects** the repeating job cards.
+- **Two modes** – _Page by page_ goes through the numbered result pages. _Continuous_ reads all
+  jobs on the current page and keeps watching it: when you scroll down (infinite scroll, "load
+  more") and new jobs appear, they are added. Click **Finish** when you are done.
+- **Title filter** – skips jobs whose title contains an excluded word at the start of a word
+  (any case). Ready-made filters: _Pupils & holiday jobs_ (Schüler, Schul, Ferial – default) and
+  _Praxissemester_ (Dual, Studiengang, Quereinsteiger, Senior, Schüler, Controlling, Ausbildung),
+  or your own words, or off. "Schul" skips "Schulbegleiter" but not "Hochschulabsolvent".
+  Filtered jobs are never opened and are counted as "Filtered out".
+- **Hover preview** – before you start, moving the mouse over the job list on Indeed, XING,
+  LinkedIn or StepStone outlines the whole list in green with "List with 25 jobs · about 360 in
+  total" (other sites: largest repeating list).
 - **Live view** (Settings, on by default) – while collecting, the results tab where you clicked
   Start shows the progress on the job cards themselves: a dashed green outline once a job's link
   is collected, a pulsing border with "Collecting…" while its page is read, a green ✓ when it is
@@ -258,6 +269,15 @@ npm run build
   letzte Sammlung.
 - **Generischer Modus** – auf anderen Seiten fragt Sanjob nach der Berechtigung für genau diese
   Seite und erkennt die Stellenkarten automatisch.
+- **Zwei Modi** – _Seite für Seite_ geht die Ergebnisseiten durch. _Fortlaufend_ liest alle Jobs
+  der aktuellen Seite und beobachtet sie weiter: scrollst du nach unten und neue Jobs erscheinen,
+  kommen sie dazu. Mit **Fertigstellen** beenden.
+- **Titel-Filter** – überspringt Jobs, deren Titel ein ausgeschlossenes Wort (Wortanfang, egal
+  ob groß/klein) enthält. Fertige Filter: _Schüler & Ferialjobs_ (Schüler, Schul, Ferial –
+  Standard) und _Praxissemester_ (Dual, Studiengang, Quereinsteiger, Senior, Schüler,
+  Controlling, Ausbildung), eigene Wörter oder aus.
+- **Hover-Vorschau** – vor dem Start wird beim Bewegen der Maus über die Jobliste (Indeed, XING,
+  LinkedIn, StepStone) die ganze Liste grün markiert: „Liste mit 25 Jobs · ca. 360 insgesamt“.
 - **Live-Ansicht** (Einstellungen, standardmäßig an) – im Ergebnis-Tab, in dem du gestartet
   hast, siehst du den Fortschritt direkt an den Stellenkarten: grün gestrichelt = Link gesammelt,
   pulsierender Rahmen mit „Wird gesammelt…“ = wird gerade gelesen, grünes ✓ = gespeichert, grau

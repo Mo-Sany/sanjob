@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { repo } from '../../db/db';
+import { FILTER_PRESETS, parseKeywords } from '../../shared/filter';
 import { fmt, type Strings } from '../../shared/i18n';
 import type { Language, Settings, WindowMode } from '../../shared/types';
 import { send } from '../api';
@@ -14,6 +15,7 @@ interface Props {
 export function SettingsView({ t, settings, update, notify }: Props) {
   const [historySize, setHistorySize] = useState(0);
   const [cv, setCv] = useState(settings.cvText);
+  const [words, setWords] = useState(settings.excludeKeywords.join(', '));
 
   useEffect(() => {
     void repo.historySize().then(setHistorySize);
@@ -94,6 +96,41 @@ export function SettingsView({ t, settings, update, notify }: Props) {
           <option value="normal">{t.windowNormal}</option>
         </select>
       </label>
+
+      <div class="flex flex-col gap-1">
+        <span class="label">{t.filter}</span>
+        <select
+          class="input"
+          value={settings.filterPreset}
+          onChange={(e) =>
+            void update({
+              filterPreset: (e.target as HTMLSelectElement).value as Settings['filterPreset'],
+            })
+          }
+        >
+          {FILTER_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name[settings.language]} – {p.keywords.join(', ')}
+            </option>
+          ))}
+          <option value="custom">{t.filterCustom}</option>
+          <option value="off">{t.filterOff}</option>
+        </select>
+        {settings.filterPreset === 'custom' && (
+          <label class="mt-1 flex flex-col gap-1">
+            <span class="text-xs text-slate-600 dark:text-slate-300">{t.filterWords}</span>
+            <input
+              class="input"
+              value={words}
+              onInput={(e) => setWords((e.target as HTMLInputElement).value)}
+              onBlur={() =>
+                void update({ excludeKeywords: parseKeywords(words) }).then(() => notify(t.saved))
+              }
+            />
+          </label>
+        )}
+        <span class="text-[11px] text-slate-500 dark:text-slate-400">{t.filterHint}</span>
+      </div>
 
       <label class="flex items-start gap-2">
         <input
