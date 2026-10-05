@@ -1,6 +1,8 @@
 {
-  "extName": { "message": "Sanjob" },
+  "extName": {
+    "message": "Sanjob"
+  },
   "extDescription": {
-    "message": "Collect job listings from job boards and export them to one Excel table."
+    "message": "Collect job listings from StepStone, Indeed, LinkedIn and XING into one Excel table – sorted, filtered, ready to apply."
   }
 }

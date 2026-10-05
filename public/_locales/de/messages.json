@@ -1,6 +1,8 @@
 {
-  "extName": { "message": "Sanjob" },
+  "extName": {
+    "message": "Sanjob"
+  },
   "extDescription": {
-    "message": "Stellenanzeigen von Jobbörsen sammeln und in eine Excel-Tabelle exportieren."
+    "message": "Stellenanzeigen von StepStone, Indeed, LinkedIn und XING in eine Excel-Tabelle sammeln – sortiert, gefiltert, bereit zur Bewerbung."
   }
 }
