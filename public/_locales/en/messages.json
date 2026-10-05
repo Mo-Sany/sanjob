@@ -1,0 +1,6 @@
+{
+  "extName": { "message": "Sanjob" },
+  "extDescription": {
+    "message": "Collect job listings from job boards and export them to one Excel table."
+  }
+}

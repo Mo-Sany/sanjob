@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- SYNTHETIC fixture: minimal Indeed /jobs search page to test pagination.
+     The real saved Indeed page (homepage-feed.html) has job cards but no pagination. -->
+<html lang="de">
+<head><meta charset="utf-8"><title>Elektroniker Jobs in Hamburg - Indeed</title></head>
+<body>
+<div id="mosaic-provider-jobcards"><ul>
+  <li><div class="cardOutline tapItem result job_aaaa111122223333"><div class="job_seen_beacon">
+    <h2 class="jobTitle"><a class="jcs-JobTitle" data-jk="aaaa111122223333" href="/rc/clk?jk=aaaa111122223333&amp;from=serp&amp;vjs=3"><span title="Elektroniker" id="jobTitle-aaaa111122223333">Elektroniker</span></a></h2>
+    <span data-testid="company-name">Alpha GmbH</span><div data-testid="text-location">Hamburg</div>
+    <span data-testid="myJobsStateDate">Vor 3 Tagen geschaltet</span>
+  </div></div></li>
+  <li><div class="cardOutline tapItem result job_bbbb111122223333"><div class="job_seen_beacon">
+    <h2 class="jobTitle"><a class="jcs-JobTitle" data-jk="bbbb111122223333" href="/pagead/clk?mo=r&amp;ad=xyz"><span title="Mechatroniker" id="jobTitle-bbbb111122223333">Mechatroniker</span></a></h2>
+    <span data-testid="company-name">Beta AG</span><div data-testid="text-location">Hamburg-Altona</div>
+  </div></div></li>
+</ul></div>
+<nav role="navigation" aria-label="pagination">
+  <a data-testid="pagination-page-current">1</a>
+  <a data-testid="pagination-page-2" href="/jobs?q=Elektroniker&amp;l=Hamburg&amp;start=10">2</a>
+  <a data-testid="pagination-page-next" aria-label="Next Page" href="/jobs?q=Elektroniker&amp;l=Hamburg&amp;start=10">›</a>
+</nav>
+</body>
+</html>
