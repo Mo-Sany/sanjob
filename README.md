@@ -38,6 +38,13 @@ other sites.
 Jobs you collected before (same normalized URL) are skipped automatically, also across runs.
 **Settings → Clear history** forgets them.
 
+### Download (ready to install)
+
+Every change on `main` is built automatically. Get the ready-to-install zip from
+**[Releases → latest](https://github.com/Mo-Sany/sanjob/releases/latest)** (`sanjob-<version>.zip`),
+unzip it into a folder (not inside OneDrive), then follow steps 1–4 below and choose that folder.
+"Code → Download ZIP" on GitHub is the source code – it has to be built first (see below).
+
 ### Install (Load unpacked)
 
 Requirements: Node.js 20+ and Chrome 116+.
@@ -247,6 +254,13 @@ _Applies to the Sanjob browser extension._
 
 Bereits gesammelte Jobs (gleiche normalisierte URL) werden automatisch übersprungen – auch über
 mehrere Durchläufe hinweg. **Einstellungen → Verlauf löschen** setzt das zurück.
+
+### Download (fertig zum Installieren)
+
+Jede Änderung auf `main` wird automatisch gebaut. Die fertige Zip-Datei gibt es unter
+**[Releases → latest](https://github.com/Mo-Sany/sanjob/releases/latest)** (`sanjob-<version>.zip`):
+in einen Ordner entpacken (nicht in OneDrive), dann die Schritte 1–4 unten ausführen und diesen
+Ordner wählen. „Code → Download ZIP“ auf GitHub ist der Quellcode – der muss erst gebaut werden.
 
 ### Installation (Entpackte Erweiterung laden)
 

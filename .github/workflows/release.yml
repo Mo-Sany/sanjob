@@ -1,0 +1,55 @@
+# Builds the extension on every push to main and publishes the ready-to-install zip
+# as the "latest" GitHub release: https://github.com/Mo-Sany/sanjob/releases/latest
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run zip
+
+      - name: Publish the "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./dist/manifest.json').version")
+          ZIP="sanjob-${VERSION}.zip"
+          cat > notes.md <<NOTES
+          Ready-to-install build of Sanjob ${VERSION} from commit ${GITHUB_SHA::7}.
+
+          **Install (Chrome / Edge):** download \`${ZIP}\` below, unzip it into a folder
+          (not inside OneDrive), open \`chrome://extensions\`, turn on *Developer mode* and click
+          *Load unpacked* → choose the unzipped folder.
+
+          **Chrome Web Store:** upload \`${ZIP}\` as it is (do not unzip).
+
+          Note: *Source code (zip)* below is the source code only – it cannot be loaded into Chrome.
+          NOTES
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest "$ZIP" \
+            --target "$GITHUB_SHA" \
+            --title "Sanjob ${VERSION} (latest)" \
+            --notes-file notes.md \
+            --latest
