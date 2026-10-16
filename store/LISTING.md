@@ -22,7 +22,7 @@ Upload package: run `npm run zip` → `sanjob-<version>.zip` (manifest.json at t
 ```
 Sanjob turns your job search into one clean Excel table – collected automatically, sorted, filtered and ready for your applications.
 
-Searching for a job, an internship or a Praxissemester usually means opening dozens of ads, copying titles, companies and requirements by hand and losing track of what you have already seen. Sanjob does this work for you: open a search results page on StepStone, Indeed, LinkedIn or XING, click "Start collecting" and keep working while Sanjob reads the job ads one by one in the background.
+Searching for a job, an internship or a Praxissemester usually means opening dozens of ads, copying titles, companies and requirements by hand and losing track of what you have already seen – and most of the results don't even fit you. Sanjob does this work for you: open a search results page on StepStone, Indeed, LinkedIn or XING, click "Start collecting" and keep working while Sanjob reads the job ads one by one in the background. Upload your CV and Sanjob tells you which jobs fit you best, rates each one and shows you the keywords of every job.
 
 ━━━━━━━━━━━━━━━━━━━━
 HOW IT WORKS
@@ -108,9 +108,20 @@ EXCEL EXPORT
 • Very long texts are shortened safely so Excel can always open the file
 
 ━━━━━━━━━━━━━━━━━━━━
-CV MATCH PROMPT (OPTIONAL)
+WHICH JOBS FIT YOUR CV?
 ━━━━━━━━━━━━━━━━━━━━
-Paste your CV or skills once in the settings. Sanjob then copies a ready-made prompt with your CV and the collected jobs to the clipboard. Paste it into the AI assistant of your choice (e.g. claude.ai) to find out which jobs fit you best. Sanjob itself never sends your CV anywhere – it only uses the clipboard.
+Upload your CV once in the settings (PDF, Word or text) – it is read inside your browser.
+• Every job gets a fit score from 0 to 100: very good, good, partial or low fit
+• The table is sorted by fit, and "Best matches for your CV" shows your top 5
+• Open a job to see its keywords, which of them are in your CV and which are missing – perfect for tailoring your application
+• Must-haves count more than nice-to-haves ("wünschenswert", "von Vorteil"), and an English CV also matches German ads
+• Show only jobs from 60 % fit, and keep track of your applications: status (interested, applied, interview, offer, rejected) and notes for every job
+• The Excel export includes status, notes, fit %, keywords, "in my CV" and "missing" columns
+This rating runs locally – your CV never leaves your browser.
+
+Optional AI evaluation: turn it on in the settings and enter your own Anthropic API key to let Claude rate the jobs. Each job gets an AI score, a short verdict, matched and missing skills and its keywords. Only when you click "Rate with AI" are your CV and the chosen job ads sent directly to Anthropic with your key; usage is billed to your Anthropic account.
+
+Prefer to use your own AI chat? "Match with my CV" copies a ready-made prompt with your CV and the selected jobs to the clipboard.
 
 ━━━━━━━━━━━━━━━━━━━━
 OTHER JOB SITES
@@ -121,7 +132,7 @@ Sanjob also works on many other job boards and company career pages: point at th
 PRIVATE AND FAIR BY DESIGN
 ━━━━━━━━━━━━━━━━━━━━
 • Everything stays in your browser: no account, no servers, no tracking, no analytics.
-• Your collected jobs, settings and CV are stored locally and are never sent to the developer or third parties.
+• Your collected jobs, settings and CV are stored locally and are never sent to the developer. Only the optional AI evaluation – if you turn it on and use it – sends your CV and the chosen job ads to Anthropic with your own key.
 • Sanjob never solves CAPTCHAs and never bypasses logins. If a site asks you to confirm that you are human or to sign in, Sanjob stops, tells you, and waits until you have handled it yourself.
 • Sanjob reads one job at a time with a random pause of several seconds between pages, like a person would.
 • Interface in English and German.
@@ -143,7 +154,7 @@ Privacy policy: https://github.com/Mo-Sany/sanjob/blob/main/PRIVACY.md
 ```
 Sanjob macht aus deiner Jobsuche eine saubere Excel-Tabelle – automatisch gesammelt, sortiert, gefiltert und bereit für deine Bewerbungen.
 
-Wer einen Job, ein Praktikum oder ein Praxissemester sucht, öffnet meist Dutzende Anzeigen, kopiert Titel, Firmen und Anforderungen von Hand und verliert schnell den Überblick. Sanjob übernimmt das für dich: Öffne eine Ergebnisseite auf StepStone, Indeed, LinkedIn oder XING, klick auf „Sammeln starten“ und arbeite einfach weiter, während Sanjob die Anzeigen nacheinander im Hintergrund liest.
+Wer einen Job, ein Praktikum oder ein Praxissemester sucht, öffnet meist Dutzende Anzeigen, kopiert Titel, Firmen und Anforderungen von Hand und verliert schnell den Überblick – und die meisten Treffer passen gar nicht. Sanjob übernimmt das für dich: Öffne eine Ergebnisseite auf StepStone, Indeed, LinkedIn oder XING, klick auf „Sammeln starten“ und arbeite einfach weiter, während Sanjob die Anzeigen nacheinander im Hintergrund liest. Lade deinen Lebenslauf hoch, und Sanjob zeigt dir, welche Jobs am besten passen, bewertet jeden einzelnen und nennt dir die Schlüsselwörter jeder Stelle.
 
 ━━━━━━━━━━━━━━━━━━━━
 SO FUNKTIONIERT ES
@@ -229,9 +240,20 @@ EXCEL-EXPORT
 • Sehr lange Texte werden sicher gekürzt, damit Excel die Datei immer öffnen kann
 
 ━━━━━━━━━━━━━━━━━━━━
-LEBENSLAUF-ABGLEICH (OPTIONAL)
+WELCHE JOBS PASSEN ZU DEINEM LEBENSLAUF?
 ━━━━━━━━━━━━━━━━━━━━
-Füge deinen Lebenslauf oder deine Skills einmal in den Einstellungen ein. Sanjob kopiert dann einen fertigen Prompt mit deinem Lebenslauf und den gesammelten Jobs in die Zwischenablage. Füge ihn in den KI-Assistenten deiner Wahl ein (z. B. claude.ai) und finde heraus, welche Jobs am besten zu dir passen. Sanjob selbst sendet deinen Lebenslauf nirgendwohin – es nutzt nur die Zwischenablage.
+Lade deinen Lebenslauf einmal in den Einstellungen hoch (PDF, Word oder Text) – er wird in deinem Browser gelesen.
+• Jeder Job bekommt eine Passung von 0 bis 100: passt sehr gut, gut, teilweise oder wenig
+• Die Tabelle wird nach Passung sortiert, „Beste Treffer für deinen Lebenslauf“ zeigt deine Top 5
+• Klapp einen Job auf und sieh seine Schlüsselwörter – welche in deinem Lebenslauf stehen und welche fehlen. Ideal, um die Bewerbung anzupassen
+• Muss-Anforderungen zählen mehr als Wunsch-Anforderungen („wünschenswert“, „von Vorteil“), und ein englischer Lebenslauf passt auch zu deutschen Anzeigen
+• Zeig nur Jobs ab 60 % Passung und behalte deine Bewerbungen im Blick: Status (interessant, beworben, Vorstellungsgespräch, Zusage, Absage) und Notizen für jeden Job
+• Der Excel-Export enthält Status, Notizen, Passung %, Schlüsselwörter, „In meinem Lebenslauf“ und „Fehlt im Lebenslauf“
+Diese Bewertung läuft lokal – dein Lebenslauf verlässt den Browser nicht.
+
+Optionale KI-Bewertung: Schalte sie in den Einstellungen ein und gib deinen eigenen Anthropic-API-Schlüssel ein, damit Claude die Jobs bewertet. Jeder Job bekommt eine KI-Bewertung, ein kurzes Fazit, passende und fehlende Fähigkeiten und seine Schlüsselwörter. Nur wenn du auf „Mit KI bewerten“ klickst, werden dein Lebenslauf und die gewählten Anzeigen mit deinem Schlüssel direkt an Anthropic gesendet; die Kosten laufen über dein Anthropic-Konto.
+
+Lieber dein eigener KI-Chat? „Mit meinem Lebenslauf abgleichen“ kopiert einen fertigen Prompt mit Lebenslauf und gewählten Jobs in die Zwischenablage.
 
 ━━━━━━━━━━━━━━━━━━━━
 ANDERE JOBSEITEN
@@ -242,7 +264,7 @@ Sanjob funktioniert auch auf vielen anderen Jobbörsen und Karriereseiten von Un
 PRIVAT UND FAIR
 ━━━━━━━━━━━━━━━━━━━━
 • Alles bleibt in deinem Browser: kein Konto, keine Server, kein Tracking, keine Analyse.
-• Deine gesammelten Jobs, Einstellungen und dein Lebenslauf werden lokal gespeichert und nie an den Entwickler oder Dritte gesendet.
+• Deine gesammelten Jobs, Einstellungen und dein Lebenslauf werden lokal gespeichert und nie an den Entwickler gesendet. Nur die optionale KI-Bewertung – wenn du sie einschaltest und nutzt – sendet Lebenslauf und gewählte Anzeigen mit deinem eigenen Schlüssel an Anthropic.
 • Sanjob löst keine CAPTCHAs und umgeht keine Anmeldungen. Fragt eine Seite, ob du ein Mensch bist, oder verlangt eine Anmeldung, stoppt Sanjob, sagt dir Bescheid und wartet, bis du das selbst erledigt hast.
 • Sanjob liest einen Job nach dem anderen, mit einer zufälligen Pause von mehreren Sekunden zwischen den Seiten – wie ein Mensch.
 • Oberfläche auf Deutsch und Englisch.
@@ -283,23 +305,30 @@ Sanjob collects the job listings a user chooses from job board search results in
 
 **Permission justifications:**
 
-| Permission                                              | Justification                                                                                                                                                              |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| sidePanel                                               | The whole user interface (page summary, progress, job table, settings) is shown in the side panel.                                                                         |
-| storage                                                 | Saves the user's settings (language, delay, filter words, window mode) locally.                                                                                            |
-| tabs                                                    | Reads the URL of the active tab to recognize a job search page, and opens/navigates a background tab in Sanjob's own window to read the job ads the user asked to collect. |
-| scripting                                               | Injects Sanjob's content script into the job search page and the job ads to read the job details and to show the progress marks.                                           |
-| activeTab                                               | Lets the user analyze the current job page when they open Sanjob from the toolbar.                                                                                         |
-| alarms                                                  | Keeps a long collection running in the background service worker and resumes it after the worker restarts.                                                                 |
-| notifications                                           | Shows one notification when a collection has finished ("Done! 312 jobs collected").                                                                                        |
-| Host permissions (StepStone, Indeed, LinkedIn, XING)    | These are the supported job boards. Sanjob reads their search result pages and job ads – only when the user starts a collection.                                           |
-| Optional host permissions (https://\*/\*, http://\*/\*) | Requested at runtime for one single site only, when the user chooses to use Sanjob on another job board. Never requested automatically.                                    |
+| Permission                                              | Justification                                                                                                                                                                                              |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| sidePanel                                               | The whole user interface (page summary, progress, job table, settings) is shown in the side panel.                                                                                                         |
+| storage                                                 | Saves the user's settings (language, delay, filter words, window mode) locally.                                                                                                                            |
+| tabs                                                    | Reads the URL of the active tab to recognize a job search page, and opens/navigates a background tab in Sanjob's own window to read the job ads the user asked to collect.                                 |
+| scripting                                               | Injects Sanjob's content script into the job search page and the job ads to read the job details and to show the progress marks.                                                                           |
+| activeTab                                               | Lets the user analyze the current job page when they open Sanjob from the toolbar.                                                                                                                         |
+| alarms                                                  | Keeps a long collection running in the background service worker and resumes it after the worker restarts.                                                                                                 |
+| notifications                                           | Shows one notification when a collection has finished ("Done! 312 jobs collected").                                                                                                                        |
+| Host permissions (StepStone, Indeed, LinkedIn, XING)    | These are the supported job boards. Sanjob reads their search result pages and job ads – only when the user starts a collection.                                                                           |
+| Optional host permissions (https://\*/\*, http://\*/\*) | Requested at runtime for one single site only: another job board the user chooses to use Sanjob on, or api.anthropic.com when the user turns on the optional AI evaluation. Never requested automatically. |
 
 **Are you using remote code?** No, I am not using remote code. (All JavaScript is bundled in the package.)
 
-**Data usage** – tick nothing under "collected data". Sanjob stores data only locally in the
-browser and never transmits it to the developer or third parties (the Chrome Web Store counts
-data as "collected" only when it leaves the user's device). Then confirm all three statements:
+**Data usage** – tick these three, because the optional AI evaluation sends data to Anthropic
+when the user turns it on and uses it:
+
+- **Personally identifiable information** – the CV text (sent to Anthropic only in AI mode)
+- **Authentication information** – the user's own Anthropic API key (stored locally, sent only
+  to Anthropic to authenticate the user's own requests)
+- **Website content** – the text of the job ads (read from job boards; sent to Anthropic only in
+  AI mode)
+
+Leave the others unticked. Then confirm all three statements:
 
 - I do not sell or transfer user data to third parties, outside of the approved use cases
 - I do not use or transfer user data for purposes that are unrelated to my item's single purpose

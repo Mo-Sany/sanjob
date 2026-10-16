@@ -62,3 +62,30 @@ describe('settings', () => {
     expect(s.maxPages).toBe(1);
   });
 });
+
+describe('search includes notes', () => {
+  it('finds a job by a word from its notes', () => {
+    const jobs = [{ ...rec('A', 'X', 1), notes: 'Ansprechpartnerin Frau Kühn' }, rec('B', 'Y', 2)];
+    expect(filterJobs(jobs, 'kühn').map((j) => j.title)).toEqual(['A']);
+  });
+});
+
+describe('sort by fit', () => {
+  it('sorts by the fit map, jobs without a score last', () => {
+    const jobs = [rec('A', 'X', 1), rec('B', 'Y', 2), rec('C', 'Z', 3)];
+    const fit = new Map<string, number | null>([
+      [jobs[0]!.url, 40],
+      [jobs[1]!.url, null],
+      [jobs[2]!.url, 90],
+    ]);
+    expect(sortJobs(jobs, 'fit', 'desc', fit).map((j) => j.title)).toEqual(['C', 'A', 'B']);
+    expect(sortJobs(jobs, 'fit', 'asc', fit).map((j) => j.title)).toEqual(['A', 'C', 'B']);
+  });
+});
+
+describe('settings', () => {
+  it('keeps only the offered fit filter values', () => {
+    expect(sanitizeSettings({ fitMin: 60 }).fitMin).toBe(60);
+    expect(sanitizeSettings({ fitMin: 55 }).fitMin).toBe(0);
+  });
+});

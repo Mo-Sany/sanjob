@@ -153,6 +153,7 @@ export function App() {
             reload={reloadJobs}
             notify={notify}
             sectionRef={tableRef}
+            openSettings={() => setView('settings')}
           />
         </>
       )}

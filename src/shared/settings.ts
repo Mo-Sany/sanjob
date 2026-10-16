@@ -8,7 +8,10 @@ export const DEFAULT_SETTINGS: Settings = {
   maxPages: 10,
   windowMode: 'minimized',
   cvText: '',
-  claudeMode: 'clipboard',
+  cvFileName: '',
+  aiEnabled: false,
+  aiModel: 'claude-opus-5-5',
+  fitMin: 0,
   exportAppend: true,
   liveView: true,
   filterPreset: 'school',
@@ -47,7 +50,14 @@ export function sanitizeSettings(s: Partial<Settings>): Settings {
     maxPages: Math.max(1, Math.min(500, Math.round(Number(merged.maxPages) || 1))),
     windowMode: merged.windowMode === 'normal' ? 'normal' : 'minimized',
     cvText: String(merged.cvText ?? ''),
-    claudeMode: 'clipboard',
+    cvFileName: String(merged.cvFileName ?? ''),
+    aiEnabled: merged.aiEnabled === true,
+    aiModel: (['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'] as const).includes(
+      merged.aiModel,
+    )
+      ? merged.aiModel
+      : 'claude-opus-5-5',
+    fitMin: [0, 40, 60, 80].includes(Number(merged.fitMin)) ? Number(merged.fitMin) : 0,
     exportAppend: merged.exportAppend !== false,
     liveView: merged.liveView !== false,
     excludeKeywords: Array.isArray(merged.excludeKeywords)
