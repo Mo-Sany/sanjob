@@ -114,7 +114,9 @@ Upload your CV once in the settings (PDF, Word or text) – it is read inside yo
 • Every job gets a fit score from 0 to 100: very good, good, partial or low fit
 • The table is sorted by fit, and "Best matches for your CV" shows your top 5
 • Open a job to see its keywords, which of them are in your CV and which are missing – perfect for tailoring your application
-• The Excel export includes fit %, keywords, "in my CV" and "missing" columns
+• Must-haves count more than nice-to-haves ("wünschenswert", "von Vorteil"), and an English CV also matches German ads
+• Show only jobs from 60 % fit, and keep track of your applications: status (interested, applied, interview, offer, rejected) and notes for every job
+• The Excel export includes status, notes, fit %, keywords, "in my CV" and "missing" columns
 This rating runs locally – your CV never leaves your browser.
 
 Optional AI evaluation: turn it on in the settings and enter your own Anthropic API key to let Claude rate the jobs. Each job gets an AI score, a short verdict, matched and missing skills and its keywords. Only when you click "Rate with AI" are your CV and the chosen job ads sent directly to Anthropic with your key; usage is billed to your Anthropic account.
@@ -244,7 +246,9 @@ Lade deinen Lebenslauf einmal in den Einstellungen hoch (PDF, Word oder Text) �
 • Jeder Job bekommt eine Passung von 0 bis 100: passt sehr gut, gut, teilweise oder wenig
 • Die Tabelle wird nach Passung sortiert, „Beste Treffer für deinen Lebenslauf“ zeigt deine Top 5
 • Klapp einen Job auf und sieh seine Schlüsselwörter – welche in deinem Lebenslauf stehen und welche fehlen. Ideal, um die Bewerbung anzupassen
-• Der Excel-Export enthält Passung %, Schlüsselwörter, „In meinem Lebenslauf“ und „Fehlt im Lebenslauf“
+• Muss-Anforderungen zählen mehr als Wunsch-Anforderungen („wünschenswert“, „von Vorteil“), und ein englischer Lebenslauf passt auch zu deutschen Anzeigen
+• Zeig nur Jobs ab 60 % Passung und behalte deine Bewerbungen im Blick: Status (interessant, beworben, Vorstellungsgespräch, Zusage, Absage) und Notizen für jeden Job
+• Der Excel-Export enthält Status, Notizen, Passung %, Schlüsselwörter, „In meinem Lebenslauf“ und „Fehlt im Lebenslauf“
 Diese Bewertung läuft lokal – dein Lebenslauf verlässt den Browser nicht.
 
 Optionale KI-Bewertung: Schalte sie in den Einstellungen ein und gib deinen eigenen Anthropic-API-Schlüssel ein, damit Claude die Jobs bewertet. Jeder Job bekommt eine KI-Bewertung, ein kurzes Fazit, passende und fehlende Fähigkeiten und seine Schlüsselwörter. Nur wenn du auf „Mit KI bewerten“ klickst, werden dein Lebenslauf und die gewählten Anzeigen mit deinem Schlüssel direkt an Anthropic gesendet; die Kosten laufen über dein Anthropic-Konto.

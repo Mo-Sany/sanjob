@@ -112,7 +112,14 @@ policy is [`PRIVACY.md`](PRIVACY.md). Increase `version` in `package.json` for e
   Open a row to see the **keywords of the job**, which of them are **in your CV** and which are
   **missing**. Keywords come from a skills dictionary
   ([`src/match/skills.ts`](src/match/skills.ts) – add your own) plus words typical for the ad.
-  Profile requirements count most. Nothing leaves the browser.
+  Profile requirements count most; must-haves ("zwingend", "erforderlich", "required", marked ❗)
+  count 1.5×, nice-to-haves ("wünschenswert", "von Vorteil", "a plus", marked _optional_) only
+  0.4×. An English CV also matches a German ad (and vice versa) through a small glossary
+  ([`src/match/glossary.ts`](src/match/glossary.ts)). Nothing leaves the browser.
+- **Filters and application tracking** – show only jobs from 40/60/80 % fit, set a status per
+  job (interested / applied / interview / offer / rejected), filter by status and keep notes
+  (contact, deadline …). Status and notes are kept when the same job is collected again and are
+  exported to Excel.
 - **AI evaluation (optional)** – in Settings → AI evaluation, turn on "Rate jobs with Claude",
   allow access to `api.anthropic.com` and enter your own Anthropic API key (stored only on this
   device). **Rate with AI** sends your CV and the selected jobs (or the top 10 by local fit) to
@@ -122,8 +129,8 @@ policy is [`PRIVACY.md`](PRIVACY.md). Increase `version` in `package.json` for e
 - **Match with my CV (prompt)** – select jobs (or use ✦ on a row) and click **Match with my CV**:
   a ready-made prompt (instructions + CV + job data) is copied to the clipboard for
   [claude.ai](https://claude.ai) – no API key needed.
-- **Excel** – the export also has the columns _Fit %_, _Fit_, _Keywords_, _In my CV_, _Missing in
-  my CV_ and _AI verdict_ (keywords are filled even without a CV).
+- **Excel** – the export also has the columns _Status_, _Notes_, _Fit %_, _Fit_, _Keywords_,
+  _In my CV_, _Missing in my CV_ and _AI verdict_ (keywords are filled even without a CV).
 - **Language** – English or German (Settings).
 
 ### Data columns
@@ -335,8 +342,14 @@ npm run build
   Word .docx oder Text – wird im Browser gelesen) oder einfügen. Jeder Job bekommt dann eine
   **Passung 0–100** (passt sehr gut / gut / teilweise / wenig), die Tabelle wird danach sortiert
   und „Beste Treffer“ zeigt die Top 5. Eine Zeile aufklappen zeigt die **Schlüsselwörter der
-  Stelle**, welche **in deinem Lebenslauf** stehen und welche **fehlen**. Nichts verlässt den
-  Browser.
+  Stelle**, welche **in deinem Lebenslauf** stehen und welche **fehlen**. Muss-Anforderungen
+  („zwingend“, „erforderlich“, ❗) zählen 1,5-fach, Wunsch-Anforderungen („wünschenswert“, „von
+  Vorteil“, _optional_) nur 0,4-fach. Ein englischer Lebenslauf passt auch zu deutschen Anzeigen
+  (Glossar in [`src/match/glossary.ts`](src/match/glossary.ts)). Nichts verlässt den Browser.
+- **Filter und Bewerbungsstatus** – nur Jobs ab 40/60/80 % Passung zeigen, pro Job einen Status
+  setzen (interessant / beworben / Vorstellungsgespräch / Zusage / Absage), danach filtern und
+  Notizen speichern (Ansprechpartner, Frist …). Status und Notizen bleiben erhalten und stehen im
+  Excel-Export.
 - **KI-Bewertung (optional)** – in den Einstellungen „Jobs mit Claude bewerten“ einschalten,
   Zugriff auf `api.anthropic.com` erlauben und den eigenen Anthropic-API-Schlüssel eintragen
   (nur auf diesem Gerät gespeichert). **Mit KI bewerten** schickt Lebenslauf und die gewählten
@@ -345,8 +358,8 @@ npm run build
   Anthropic-Konto (Standard: Claude Opus 5.5; Sonnet 5.5 und Haiku 5.5 sind günstiger).
 - **Mit meinem Lebenslauf abgleichen (Prompt)** – Jobs auswählen (oder ✦ in einer Zeile) – ein
   fertiger Prompt wird für [claude.ai](https://claude.ai) kopiert, ohne API-Schlüssel.
-- **Excel** – der Export enthält zusätzlich _Passung %_, _Passung_, _Schlüsselwörter_, _In meinem
-  Lebenslauf_, _Fehlt im Lebenslauf_ und _KI-Fazit_.
+- **Excel** – der Export enthält zusätzlich _Status_, _Notizen_, _Passung %_, _Passung_,
+  _Schlüsselwörter_, _In meinem Lebenslauf_, _Fehlt im Lebenslauf_ und _KI-Fazit_.
 - **Sprache** – Englisch oder Deutsch (Einstellungen).
 
 ### Spalten

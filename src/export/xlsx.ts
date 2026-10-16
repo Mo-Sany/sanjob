@@ -17,8 +17,9 @@ export const TRUNCATED_SUFFIX = ' [truncated]';
 export const MAX_ROW_HEIGHT_PT = 120;
 const LINE_HEIGHT_PT = 15;
 
-/** CV match columns (only when match data is passed to buildXlsx). */
-export type FitColumn = 'fitScore' | 'fitLevel' | 'keywords' | 'inCv' | 'missing' | 'aiVerdict';
+/** Tracking + CV match columns (only when this data is passed to buildXlsx). */
+export type FitColumn =
+  'status' | 'notes' | 'fitScore' | 'fitLevel' | 'keywords' | 'inCv' | 'missing' | 'aiVerdict';
 export type FitCells = Record<FitColumn, string> & { score: number | null };
 type ExportColumn = JobColumn | FitColumn;
 
@@ -33,6 +34,8 @@ const BASE_COLUMNS: Array<{ key: JobColumn; maxWidth: number }> = [
 ];
 
 const FIT_COLUMNS: Array<{ key: FitColumn; maxWidth: number }> = [
+  { key: 'status', maxWidth: 22 },
+  { key: 'notes', maxWidth: 40 },
   { key: 'fitScore', maxWidth: 10 },
   { key: 'fitLevel', maxWidth: 18 },
   { key: 'keywords', maxWidth: 50 },
@@ -69,6 +72,8 @@ export const HEADERS: Record<Language, Record<ExportColumn, string>> = {
     profile: 'Your profile',
     offer: 'We offer',
     other: 'Other',
+    status: 'Status',
+    notes: 'Notes',
     fitScore: 'Fit %',
     fitLevel: 'Fit',
     keywords: 'Keywords',
@@ -89,6 +94,8 @@ export const HEADERS: Record<Language, Record<ExportColumn, string>> = {
     profile: 'Ihr Profil',
     offer: 'Wir bieten',
     other: 'Sonstiges',
+    status: 'Status',
+    notes: 'Notizen',
     fitScore: 'Passung %',
     fitLevel: 'Passung',
     keywords: 'Schlüsselwörter',
@@ -173,8 +180,11 @@ export function buildXlsx(
     ? [...BASE_COLUMNS, ...FIT_COLUMNS, ...TEXT_COLUMNS]
     : COLUMNS;
   const headers = columns.map((c) => HEADERS[lang][c.key]);
+  const fitKeys = new Set<ExportColumn>(FIT_COLUMNS.map((c) => c.key));
   const cellOf = (job: JobData, key: ExportColumn): string =>
-    key in job ? (job[key as JobColumn] ?? '') : (fit?.get(job.url)?.[key as FitColumn] ?? '');
+    fitKeys.has(key)
+      ? (fit?.get(job.url)?.[key as FitColumn] ?? '')
+      : (job[key as JobColumn] ?? '');
   const exported = jobs.map(exportedJob);
   const rows = exported.map((job) =>
     columns.map((c) => truncateCell(cleanXmlChars(cellOf(job, c.key)))),

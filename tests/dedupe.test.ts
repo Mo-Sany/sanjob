@@ -113,3 +113,26 @@ describe('title filter in the queue', () => {
     expect((await repo.queueCounts('r1')).filtered).toBe(1);
   });
 });
+
+describe('application tracking', () => {
+  it('stores and clears status and notes; a re-collected job keeps them', async () => {
+    const repo = fresh();
+    await repo.addJob(job('https://de.indeed.com/viewjob?jk=t1'));
+    const [stored] = await repo.allJobs();
+    await repo.setTracking(stored!.id!, { status: 'applied', notes: 'Frist 30.10.' });
+    let [row] = await repo.allJobs();
+    expect(row).toMatchObject({ status: 'applied', notes: 'Frist 30.10.' });
+    expect(row!.statusAt).toBeGreaterThan(0);
+
+    // Collecting the same job again does not overwrite the row.
+    expect(await repo.addJob(job('https://de.indeed.com/viewjob?jk=t1', 'r2'))).toBe(false);
+    [row] = await repo.allJobs();
+    expect(row!.status).toBe('applied');
+
+    await repo.setTracking(stored!.id!, { status: undefined, notes: '  ' });
+    [row] = await repo.allJobs();
+    expect(row!.status).toBeUndefined();
+    expect(row!.statusAt).toBeUndefined();
+    expect(row!.notes).toBeUndefined();
+  });
+});

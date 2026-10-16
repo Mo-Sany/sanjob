@@ -44,8 +44,24 @@ export interface AiRating {
   at: number;
 }
 
+/** Where the user is with this job (application tracking). */
+export type JobStatus = 'interested' | 'applied' | 'interview' | 'offer' | 'rejected';
+export const JOB_STATUSES: JobStatus[] = [
+  'interested',
+  'applied',
+  'interview',
+  'offer',
+  'rejected',
+];
+
 export interface JobRecord extends JobData {
   id?: number;
+  /** Application status set by the user (none = not set). */
+  status?: JobStatus;
+  /** When the status was last changed (ms). */
+  statusAt?: number;
+  /** The user's own notes for this job. */
+  notes?: string;
   /** AI evaluation (only when the user ran "Rate with AI"). */
   ai?: AiRating;
   /** Normalized URL used for de-duplication. */
@@ -204,6 +220,8 @@ export interface Settings {
   /** Optional AI evaluation with the user's own Anthropic API key (key stored separately). */
   aiEnabled: boolean;
   aiModel: AiModel;
+  /** Table filter: only show jobs with at least this fit (0 = all). */
+  fitMin: number;
   /** Export: true = all stored jobs, false = only the latest collection. */
   exportAppend: boolean;
   /** Mark the job cards on the results page while collecting. */

@@ -182,13 +182,15 @@ describe('xlsx export', () => {
 });
 
 describe('xlsx export with CV match columns', () => {
-  it('adds fit %, level, keywords, in CV, missing and AI verdict after the URL', () => {
+  it('adds status, notes, fit %, level, keywords, in CV, missing and AI verdict after the URL', () => {
     const j = job({});
     const fit = new Map([
       [
         j.url,
         {
           score: 72,
+          status: 'Beworben',
+          notes: 'Frist 30.10.',
           fitScore: '72',
           fitLevel: 'Passt sehr gut',
           keywords: 'CATIA, Englisch',
@@ -201,8 +203,10 @@ describe('xlsx export with CV match columns', () => {
     const wb = XLSX.read(buildXlsx([j], 'de', fit), { type: 'array' });
     const ws = wb.Sheets['Jobs']!;
     const rows = XLSX.utils.sheet_to_json<Array<string | number>>(ws, { header: 1 });
-    expect(rows[0]?.slice(6, 14)).toEqual([
+    expect(rows[0]?.slice(6, 16)).toEqual([
       'URL',
+      'Status',
+      'Notizen',
       'Passung %',
       'Passung',
       'Schlüsselwörter',
@@ -212,9 +216,10 @@ describe('xlsx export with CV match columns', () => {
       'Beschreibung',
     ]);
     // A real number, so Excel sorts it numerically.
-    expect((ws['H2'] as XLSX.CellObject).t).toBe('n');
-    expect((ws['H2'] as XLSX.CellObject).v).toBe(72);
-    expect(rows[1]?.slice(9, 14)).toEqual([
+    expect(rows[1]?.slice(7, 9)).toEqual(['Beworben', 'Frist 30.10.']);
+    expect((ws['J2'] as XLSX.CellObject).t).toBe('n');
+    expect((ws['J2'] as XLSX.CellObject).v).toBe(72);
+    expect(rows[1]?.slice(11, 16)).toEqual([
       'CATIA, Englisch',
       'CATIA',
       'Englisch',

@@ -20,9 +20,7 @@ export function filterJobs(jobs: JobRecord[], query: string): JobRecord[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return jobs;
   return jobs.filter((job) => {
-    const hay = SEARCH_FIELDS.map((f) => job[f])
-      .join('\n')
-      .toLowerCase();
+    const hay = [...SEARCH_FIELDS.map((f) => job[f]), job.notes ?? ''].join('\n').toLowerCase();
     return words.every((w) => hay.includes(w));
   });
 }

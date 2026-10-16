@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cvFileName: '',
   aiEnabled: false,
   aiModel: 'claude-opus-5-5',
+  fitMin: 0,
   exportAppend: true,
   liveView: true,
   filterPreset: 'school',
@@ -56,6 +57,7 @@ export function sanitizeSettings(s: Partial<Settings>): Settings {
     )
       ? merged.aiModel
       : 'claude-opus-5-5',
+    fitMin: [0, 40, 60, 80].includes(Number(merged.fitMin)) ? Number(merged.fitMin) : 0,
     exportAppend: merged.exportAppend !== false,
     liveView: merged.liveView !== false,
     excludeKeywords: Array.isArray(merged.excludeKeywords)

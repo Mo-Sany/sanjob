@@ -36,7 +36,19 @@ export function FitBadge({
   );
 }
 
-function Chips({ words, tone }: { words: string[]; tone: 'match' | 'miss' | 'plain' }) {
+function Chips({
+  t,
+  words,
+  tone,
+  match,
+}: {
+  t: Strings;
+  words: string[];
+  tone: 'match' | 'miss' | 'plain';
+  match: MatchResult | undefined;
+}) {
+  const optional = new Set(match?.optional ?? []);
+  const required = new Set(match?.required ?? []);
   const cls =
     tone === 'match'
       ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-50'
@@ -46,8 +58,16 @@ function Chips({ words, tone }: { words: string[]; tone: 'match' | 'miss' | 'pla
   return (
     <div class="flex flex-wrap gap-1">
       {words.map((w) => (
-        <span key={w} class={`rounded-md px-1.5 py-0.5 text-[11px] ${cls}`}>
+        <span
+          key={w}
+          class={`rounded-md px-1.5 py-0.5 text-[11px] ${cls} ${
+            optional.has(w) ? 'border border-dashed border-current opacity-75' : ''
+          } ${required.has(w) ? 'font-semibold' : ''}`}
+          title={required.has(w) ? t.fit.required : optional.has(w) ? t.fit.optional : undefined}
+        >
+          {required.has(w) && '❗'}
           {w}
+          {optional.has(w) && <span class="opacity-70"> ({t.fit.optionalShort})</span>}
         </span>
       ))}
     </div>
@@ -90,19 +110,19 @@ export function FitDetails({
       {keywords.length > 0 && (
         <div class="flex flex-col gap-1">
           <span class="text-[11px] font-semibold text-slate-500 uppercase">{t.fit.keywords}</span>
-          <Chips words={keywords} tone="plain" />
+          <Chips t={t} words={keywords} tone="plain" match={match} />
         </div>
       )}
       {hasCv && matched.length > 0 && (
         <div class="flex flex-col gap-1">
           <span class="text-[11px] font-semibold text-slate-500 uppercase">{t.fit.matched}</span>
-          <Chips words={matched} tone="match" />
+          <Chips t={t} words={matched} tone="match" match={match} />
         </div>
       )}
       {hasCv && missing.length > 0 && (
         <div class="flex flex-col gap-1">
           <span class="text-[11px] font-semibold text-slate-500 uppercase">{t.fit.missing}</span>
-          <Chips words={missing} tone="miss" />
+          <Chips t={t} words={missing} tone="miss" match={match} />
         </div>
       )}
     </div>

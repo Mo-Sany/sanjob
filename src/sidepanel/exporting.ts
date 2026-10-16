@@ -18,6 +18,8 @@ export function fitCells(
   const keywords = ai?.keywords.length ? ai.keywords : (match?.keywords ?? []);
   return {
     score,
+    status: job.status ? t.tracking[job.status] : '',
+    notes: job.notes ?? '',
     fitScore: score === null ? '' : String(score),
     fitLevel: score === null ? '' : t.fit.levels[levelOf(score)],
     keywords: keywords.join(', '),

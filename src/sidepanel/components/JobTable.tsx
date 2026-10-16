@@ -5,11 +5,28 @@ import { getProvider } from '../../claude/provider';
 import { repo } from '../../db/db';
 import { matchAll } from '../../match/local';
 import { fmt, type Strings } from '../../shared/i18n';
-import { SECTION_FIELDS, type JobColumn, type JobRecord, type Settings } from '../../shared/types';
+import {
+  JOB_STATUSES,
+  SECTION_FIELDS,
+  type JobColumn,
+  type JobRecord,
+  type JobStatus,
+  type Settings,
+} from '../../shared/types';
 import type { Notify } from '../App';
 import { exportJobs } from '../exporting';
 import { filterJobs, sortJobs, type SortDir, type SortKey } from '../table';
 import { BestMatches, FitBadge, FitDetails, fitScore } from './Fit';
+
+const STATUS_CLASS: Record<JobStatus | 'none', string> = {
+  none: 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800',
+  interested: 'border-sky-300 bg-sky-50 text-sky-900 dark:bg-sky-900 dark:text-sky-50',
+  applied: 'border-indigo-300 bg-indigo-50 text-indigo-900 dark:bg-indigo-900 dark:text-indigo-50',
+  interview: 'border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-900 dark:text-amber-50',
+  offer:
+    'border-emerald-400 bg-emerald-50 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-50',
+  rejected: 'border-slate-300 bg-slate-100 text-slate-500 line-through dark:bg-slate-700',
+};
 
 /** How many of the best local matches "Rate top N with AI" sends. */
 const AI_TOP = 10;
@@ -65,10 +82,18 @@ export function JobTable({
     return map;
   }, [jobs, matches]);
 
-  const rows = useMemo(
-    () => sortJobs(filterJobs(jobs, query), sortKey, sortDir, fitOf),
-    [jobs, query, sortKey, sortDir, fitOf],
-  );
+  const [statusFilter, setStatusFilter] = useState<'all' | 'none' | JobStatus>('all');
+  const fitMin = hasCv ? settings.fitMin : 0;
+
+  const rows = useMemo(() => {
+    const visible = filterJobs(jobs, query).filter((job) => {
+      if (fitMin > 0 && (fitOf.get(job.url) ?? -1) < fitMin) return false;
+      if (statusFilter === 'none') return !job.status;
+      return statusFilter === 'all' || job.status === statusFilter;
+    });
+    return sortJobs(visible, sortKey, sortDir, fitOf);
+  }, [jobs, query, sortKey, sortDir, fitOf, fitMin, statusFilter]);
+  const hiddenByFilters = filterJobs(jobs, query).length - rows.length;
   const selectedJobs = jobs.filter((j) => j.id !== undefined && selected.has(j.id));
   const allVisibleSelected =
     rows.length > 0 && rows.every((r) => r.id !== undefined && selected.has(r.id));
@@ -175,8 +200,19 @@ export function JobTable({
           .sort((a, b) => (fitOf.get(b.url) ?? -1) - (fitOf.get(a.url) ?? -1))
           .slice(0, AI_TOP);
 
+  const setTracking = async (
+    job: JobRecord,
+    patch: { status?: JobStatus | undefined; notes?: string },
+  ): Promise<void> => {
+    if (job.id === undefined) return;
+    await repo.setTracking(job.id, patch);
+    await reload();
+  };
+
   const openJob = (job: JobRecord): void => {
     setQuery('');
+    setStatusFilter('all');
+    if (fitMin > 0) void update({ fitMin: 0 });
     setExpanded(job.id ?? null);
     requestAnimationFrame(() =>
       document
@@ -231,6 +267,51 @@ export function JobTable({
         value={query}
         onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
       />
+
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        {hasCv && (
+          <label class="flex items-center gap-1">
+            <span class="text-slate-500 dark:text-slate-400">{t.fit.filter}</span>
+            <select
+              class="input py-0.5"
+              value={settings.fitMin}
+              onChange={(e) =>
+                void update({ fitMin: Number((e.target as HTMLSelectElement).value) })
+              }
+            >
+              <option value={0}>{t.fit.filterAll}</option>
+              {[40, 60, 80].map((n) => (
+                <option key={n} value={n}>
+                  {fmt(t.fit.filterMin, { n })}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label class="flex items-center gap-1">
+          <span class="text-slate-500 dark:text-slate-400">{t.tracking.label}</span>
+          <select
+            class="input py-0.5"
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter((e.target as HTMLSelectElement).value as typeof statusFilter)
+            }
+          >
+            <option value="all">{t.tracking.filterAll}</option>
+            <option value="none">{t.tracking.none}</option>
+            {JOB_STATUSES.map((st) => (
+              <option key={st} value={st}>
+                {t.tracking[st]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {hiddenByFilters > 0 && (
+          <span class="text-slate-500 dark:text-slate-400">
+            {fmt(t.fit.hidden, { n: hiddenByFilters })}
+          </span>
+        )}
+      </div>
 
       <div class="flex flex-wrap gap-2">
         <button
@@ -300,6 +381,7 @@ export function JobTable({
                   {t.fit.column}
                   {arrow('fit')}
                 </th>
+                <th class="p-1 text-left font-semibold whitespace-nowrap">{t.tracking.label}</th>
                 {VISIBLE.map((key) => (
                   <th
                     key={key}
@@ -329,6 +411,24 @@ export function JobTable({
                     </td>
                     <td class="p-1">
                       <FitBadge t={t} job={job} match={matches.get(job.url)} />
+                    </td>
+                    <td class="p-1">
+                      <select
+                        class={`rounded border px-0.5 py-0.5 text-[11px] ${STATUS_CLASS[job.status ?? 'none']}`}
+                        aria-label={t.tracking.label}
+                        value={job.status ?? ''}
+                        onChange={(e) => {
+                          const v = (e.target as HTMLSelectElement).value as JobStatus | '';
+                          void setTracking(job, { status: v || undefined });
+                        }}
+                      >
+                        <option value="">{t.tracking.none}</option>
+                        {JOB_STATUSES.map((st) => (
+                          <option key={st} value={st}>
+                            {t.tracking[st]}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td class="min-w-40 p-1">
                       <button
@@ -368,7 +468,7 @@ export function JobTable({
                   {expanded === job.id && (
                     <tr class="animate-in bg-slate-50 dark:bg-slate-900/60">
                       <td />
-                      <td colSpan={8} class="p-2">
+                      <td colSpan={9} class="p-2">
                         <a
                           class="break-all text-teal-800 dark:text-teal-300"
                           href={job.url}
@@ -378,6 +478,21 @@ export function JobTable({
                           {job.url}
                         </a>
                         <FitDetails t={t} job={job} match={matches.get(job.url)} hasCv={hasCv} />
+                        <label class="mt-2 flex flex-col gap-1">
+                          <span class="text-[11px] font-semibold text-slate-500 uppercase">
+                            {t.tracking.notes}
+                          </span>
+                          <textarea
+                            key={`notes-${job.id}`}
+                            class="input min-h-16 text-xs"
+                            placeholder={t.tracking.notesPlaceholder}
+                            defaultValue={job.notes ?? ''}
+                            onBlur={(e) => {
+                              const notes = (e.target as HTMLTextAreaElement).value;
+                              if (notes !== (job.notes ?? '')) void setTracking(job, { notes });
+                            }}
+                          />
+                        </label>
                         {SECTION_FIELDS.some((f) => job[f]) ? (
                           <div class="mt-2 grid gap-2 sm:grid-cols-2">
                             {SECTION_FIELDS.filter((f) => job[f]).map((f) => (
