@@ -1,7 +1,7 @@
 {
   "name": "sanjob",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sanjob – collect job listings from job boards into one Excel table.",
   "type": "module",
   "scripts": {
@@ -34,9 +34,12 @@
     "vitest": "^5.0.3"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "dexie": "^4.4.6",
     "fflate": "^0.8.3",
+    "pdfjs-dist": "^6.4.299",
     "preact": "^11.0.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
   }
 }

@@ -1,12 +1,10 @@
 /**
  * "Match with my CV" providers.
  *
- * Today only the clipboard provider exists: it builds a prompt and the user pastes it into
- * claude.ai. A future API provider (user's own key, requests to api.anthropic.com only) can be
- * added by implementing `MatchProvider` and registering it in `getProvider` – the UI only
- * talks to this interface. Not implemented in this version: no API key is stored or used.
+ * The clipboard provider builds a prompt and the user pastes it into claude.ai (no key needed).
+ * The per-job AI rating with the user's own API key lives in ./api.ts.
  */
-import type { JobData, Language, Settings } from '../shared/types';
+import type { JobData, Language } from '../shared/types';
 import { buildMatchPrompt } from './prompt';
 
 export interface MatchRequest {
@@ -17,12 +15,10 @@ export interface MatchRequest {
 
 export type MatchOutcome =
   /** The prompt was copied; the user continues on claude.ai. */
-  | { kind: 'copied'; prompt: string }
-  /** Reserved for a future API mode: Claude's answer text. */
-  | { kind: 'answer'; text: string };
+  { kind: 'copied'; prompt: string };
 
 export interface MatchProvider {
-  readonly id: Settings['claudeMode'];
+  readonly id: 'clipboard';
   run(req: MatchRequest): Promise<MatchOutcome>;
 }
 
@@ -38,12 +34,6 @@ export class ClipboardProvider implements MatchProvider {
   }
 }
 
-export function getProvider(
-  mode: Settings['claudeMode'],
-  deps: { writeText: (text: string) => Promise<void> },
-): MatchProvider {
-  switch (mode) {
-    case 'clipboard':
-      return new ClipboardProvider(deps.writeText);
-  }
+export function getProvider(deps: { writeText: (text: string) => Promise<void> }): MatchProvider {
+  return new ClipboardProvider(deps.writeText);
 }

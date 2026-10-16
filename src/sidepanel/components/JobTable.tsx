@@ -1,12 +1,18 @@
 import { Fragment, type RefObject } from 'preact';
-import { useMemo, useState } from 'preact/hooks';
+import { useMemo, useRef, useState } from 'preact/hooks';
+import { AiError, loadApiKey, rateJobs } from '../../claude/api';
 import { getProvider } from '../../claude/provider';
 import { repo } from '../../db/db';
+import { matchAll } from '../../match/local';
 import { fmt, type Strings } from '../../shared/i18n';
 import { SECTION_FIELDS, type JobColumn, type JobRecord, type Settings } from '../../shared/types';
 import type { Notify } from '../App';
 import { exportJobs } from '../exporting';
 import { filterJobs, sortJobs, type SortDir, type SortKey } from '../table';
+import { BestMatches, FitBadge, FitDetails, fitScore } from './Fit';
+
+/** How many of the best local matches "Rate top N with AI" sends. */
+const AI_TOP = 10;
 
 interface Props {
   t: Strings;
@@ -17,6 +23,7 @@ interface Props {
   reload: () => Promise<void>;
   notify: Notify;
   sectionRef: RefObject<HTMLElement | null>;
+  openSettings: () => void;
 }
 
 const VISIBLE: Array<JobColumn> = [
@@ -37,16 +44,30 @@ export function JobTable({
   reload,
   notify,
   sectionRef,
+  openSettings,
 }: Props) {
+  const hasCv = settings.cvText.trim() !== '';
   const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('collectedAt');
+  const [sortKey, setSortKey] = useState<SortKey>(hasCv ? 'fit' : 'collectedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [aiProgress, setAiProgress] = useState<{ done: number; total: number } | null>(null);
+  const aiAbort = useRef<AbortController | null>(null);
+
+  // Local matching: keywords for every job, scores when a CV exists (recomputed on change).
+  // Keyed by the job URLs, so saving an AI rating does not recompute everything.
+  const jobsKey = jobs.map((j) => j.url).join('\n');
+  const matches = useMemo(() => matchAll(jobs, settings.cvText), [jobsKey, settings.cvText]);
+  const fitOf = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const job of jobs) map.set(job.url, fitScore(job, matches.get(job.url)));
+    return map;
+  }, [jobs, matches]);
 
   const rows = useMemo(
-    () => sortJobs(filterJobs(jobs, query), sortKey, sortDir),
-    [jobs, query, sortKey, sortDir],
+    () => sortJobs(filterJobs(jobs, query), sortKey, sortDir, fitOf),
+    [jobs, query, sortKey, sortDir, fitOf],
   );
   const selectedJobs = jobs.filter((j) => j.id !== undefined && selected.has(j.id));
   const allVisibleSelected =
@@ -56,7 +77,7 @@ export function JobTable({
     if (key === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     else {
       setSortKey(key);
-      setSortDir('asc');
+      setSortDir(key === 'fit' ? 'desc' : 'asc');
     }
   };
 
@@ -92,7 +113,7 @@ export function JobTable({
   const match = async (targets: JobRecord[]): Promise<void> => {
     if (!settings.cvText.trim()) return notify(t.needCv, 'info');
     if (!targets.length) return notify(t.selectJobsFirst, 'info');
-    const provider = getProvider(settings.claudeMode, {
+    const provider = getProvider({
       writeText: (text) => navigator.clipboard.writeText(text),
     });
     try {
@@ -104,8 +125,68 @@ export function JobTable({
     }
   };
 
+  const rateWithAi = async (targets: JobRecord[]): Promise<void> => {
+    if (!hasCv) return notify(t.needCv, 'info');
+    const apiKey = settings.aiEnabled ? await loadApiKey() : '';
+    if (!apiKey) return notify(t.ai.needKey, 'info');
+    if (!targets.length) return notify(t.selectJobsFirst, 'info');
+    const abort = new AbortController();
+    aiAbort.current = abort;
+    let done = 0;
+    let skipped: AiError | null = null;
+    setAiProgress({ done, total: targets.length });
+    try {
+      await rateJobs({
+        apiKey,
+        cv: settings.cvText,
+        jobs: targets,
+        model: settings.aiModel,
+        lang: settings.language,
+        signal: abort.signal,
+        onResult: async (job, rating, problem) => {
+          const id = (job as JobRecord).id;
+          if (rating && id !== undefined) await repo.setAiRating(id, rating);
+          if (problem) skipped = problem;
+          setAiProgress({ done: ++done, total: targets.length });
+          await reload();
+        },
+      });
+      if (abort.signal.aborted) notify(fmt(t.ai.stopped, { n: done }), 'info');
+      else if (skipped) notify(t.ai.problems[(skipped as AiError).code], 'info');
+      else notify(fmt(t.ai.done, { n: done }));
+      if (!abort.signal.aborted) {
+        setSortKey('fit');
+        setSortDir('desc');
+      }
+    } catch (err) {
+      const code = err instanceof AiError ? err.code : 'other';
+      console.warn('[Sanjob] AI rating', err);
+      notify(t.ai.problems[code], 'warn');
+    } finally {
+      aiAbort.current = null;
+      setAiProgress(null);
+    }
+  };
+
+  const aiTargets = (): JobRecord[] =>
+    selectedJobs.length
+      ? selectedJobs
+      : [...jobs]
+          .sort((a, b) => (fitOf.get(b.url) ?? -1) - (fitOf.get(a.url) ?? -1))
+          .slice(0, AI_TOP);
+
+  const openJob = (job: JobRecord): void => {
+    setQuery('');
+    setExpanded(job.id ?? null);
+    requestAnimationFrame(() =>
+      document
+        .getElementById(`job-${job.id}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+    );
+  };
+
   const exportXlsx = (): void => {
-    const count = exportJobs(jobs, lastRunId, settings);
+    const count = exportJobs(jobs, lastRunId, settings, matches);
     notify(count ? t.exported : t.nothingToExport, count ? 'success' : 'info');
   };
 
@@ -134,6 +215,15 @@ export function JobTable({
         </button>
       </div>
 
+      <BestMatches
+        t={t}
+        jobs={jobs}
+        matches={matches}
+        hasCv={hasCv}
+        onOpen={openJob}
+        onAddCv={openSettings}
+      />
+
       <input
         type="search"
         class="input w-full"
@@ -150,6 +240,28 @@ export function JobTable({
         >
           {t.matchSelected} {selectedJobs.length ? `(${selectedJobs.length})` : ''}
         </button>
+        {settings.aiEnabled &&
+          (aiProgress ? (
+            <span class="flex items-center gap-2 text-xs">
+              <span class="animate-pulse">
+                {fmt(t.ai.running, { done: aiProgress.done + 1, n: aiProgress.total })}
+              </span>
+              <button class="btn" onClick={() => aiAbort.current?.abort()}>
+                {t.ai.stop}
+              </button>
+            </span>
+          ) : (
+            <button
+              class="btn btn-primary"
+              disabled={!jobs.length}
+              onClick={() => void rateWithAi(aiTargets())}
+            >
+              ✨{' '}
+              {selectedJobs.length
+                ? `${t.ai.rateSelected} (${selectedJobs.length})`
+                : fmt(t.ai.rateTop, { n: Math.min(AI_TOP, jobs.length) })}
+            </button>
+          ))}
         <button
           class="btn btn-danger"
           disabled={!selectedJobs.length}
@@ -180,6 +292,14 @@ export function JobTable({
                     onChange={toggleAll}
                   />
                 </th>
+                <th
+                  class="cursor-pointer p-1 text-left font-semibold whitespace-nowrap select-none"
+                  title={t.fit.sortByFit}
+                  onClick={() => toggleSort('fit')}
+                >
+                  {t.fit.column}
+                  {arrow('fit')}
+                </th>
                 {VISIBLE.map((key) => (
                   <th
                     key={key}
@@ -196,13 +316,19 @@ export function JobTable({
             <tbody>
               {rows.map((job) => (
                 <Fragment key={job.id}>
-                  <tr class="border-t border-slate-200 align-top hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700/40">
+                  <tr
+                    id={`job-${job.id}`}
+                    class="border-t border-slate-200 align-top hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700/40"
+                  >
                     <td class="p-1">
                       <input
                         type="checkbox"
                         checked={job.id !== undefined && selected.has(job.id)}
                         onChange={() => toggle(job.id)}
                       />
+                    </td>
+                    <td class="p-1">
+                      <FitBadge t={t} job={job} match={matches.get(job.url)} />
                     </td>
                     <td class="min-w-40 p-1">
                       <button
@@ -242,7 +368,7 @@ export function JobTable({
                   {expanded === job.id && (
                     <tr class="animate-in bg-slate-50 dark:bg-slate-900/60">
                       <td />
-                      <td colSpan={7} class="p-2">
+                      <td colSpan={8} class="p-2">
                         <a
                           class="break-all text-teal-800 dark:text-teal-300"
                           href={job.url}
@@ -251,6 +377,7 @@ export function JobTable({
                         >
                           {job.url}
                         </a>
+                        <FitDetails t={t} job={job} match={matches.get(job.url)} hasCv={hasCv} />
                         {SECTION_FIELDS.some((f) => job[f]) ? (
                           <div class="mt-2 grid gap-2 sm:grid-cols-2">
                             {SECTION_FIELDS.filter((f) => job[f]).map((f) => (

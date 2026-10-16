@@ -30,8 +30,24 @@ export type SectionField = (typeof SECTION_FIELDS)[number];
 /** The job fields read directly from the page (everything except URL and sections). */
 export type JobCore = Omit<JobData, 'url' | 'intro' | SectionField>;
 
+export type AiModel = 'claude-opus-5-5' | 'claude-sonnet-5-5' | 'claude-haiku-5-5';
+
+/** Result of the optional AI evaluation of one job. */
+export interface AiRating {
+  score: number;
+  verdict: string;
+  matched: string[];
+  missing: string[];
+  keywords: string[];
+  /** Model that answered (may be a fallback model). */
+  model: string;
+  at: number;
+}
+
 export interface JobRecord extends JobData {
   id?: number;
+  /** AI evaluation (only when the user ran "Rate with AI"). */
+  ai?: AiRating;
   /** Normalized URL used for de-duplication. */
   key: string;
   site: SiteId;
@@ -183,8 +199,11 @@ export interface Settings {
   maxPages: number;
   windowMode: WindowMode;
   cvText: string;
-  /** Claude integration mode. Only 'clipboard' exists today; 'api' is reserved for later. */
-  claudeMode: 'clipboard';
+  /** File name of the uploaded CV (the text itself is in cvText). */
+  cvFileName: string;
+  /** Optional AI evaluation with the user's own Anthropic API key (key stored separately). */
+  aiEnabled: boolean;
+  aiModel: AiModel;
   /** Export: true = all stored jobs, false = only the latest collection. */
   exportAppend: boolean;
   /** Mark the job cards on the results page while collecting. */

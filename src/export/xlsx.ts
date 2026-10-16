@@ -17,7 +17,12 @@ export const TRUNCATED_SUFFIX = ' [truncated]';
 export const MAX_ROW_HEIGHT_PT = 120;
 const LINE_HEIGHT_PT = 15;
 
-export const COLUMNS: Array<{ key: JobColumn; maxWidth: number }> = [
+/** CV match columns (only when match data is passed to buildXlsx). */
+export type FitColumn = 'fitScore' | 'fitLevel' | 'keywords' | 'inCv' | 'missing' | 'aiVerdict';
+export type FitCells = Record<FitColumn, string> & { score: number | null };
+type ExportColumn = JobColumn | FitColumn;
+
+const BASE_COLUMNS: Array<{ key: JobColumn; maxWidth: number }> = [
   { key: 'title', maxWidth: 50 },
   { key: 'company', maxWidth: 35 },
   { key: 'location', maxWidth: 30 },
@@ -25,6 +30,18 @@ export const COLUMNS: Array<{ key: JobColumn; maxWidth: number }> = [
   { key: 'salary', maxWidth: 28 },
   { key: 'contractType', maxWidth: 25 },
   { key: 'url', maxWidth: 45 },
+];
+
+const FIT_COLUMNS: Array<{ key: FitColumn; maxWidth: number }> = [
+  { key: 'fitScore', maxWidth: 10 },
+  { key: 'fitLevel', maxWidth: 18 },
+  { key: 'keywords', maxWidth: 50 },
+  { key: 'inCv', maxWidth: 40 },
+  { key: 'missing', maxWidth: 40 },
+  { key: 'aiVerdict', maxWidth: 60 },
+];
+
+const TEXT_COLUMNS: Array<{ key: JobColumn; maxWidth: number }> = [
   { key: 'description', maxWidth: 100 },
   { key: 'tasks', maxWidth: 70 },
   { key: 'profile', maxWidth: 70 },
@@ -32,7 +49,13 @@ export const COLUMNS: Array<{ key: JobColumn; maxWidth: number }> = [
   { key: 'other', maxWidth: 60 },
 ];
 
-export const HEADERS: Record<Language, Record<JobColumn, string>> = {
+/** Columns without match data (the default layout). */
+export const COLUMNS: Array<{ key: ExportColumn; maxWidth: number }> = [
+  ...BASE_COLUMNS,
+  ...TEXT_COLUMNS,
+];
+
+export const HEADERS: Record<Language, Record<ExportColumn, string>> = {
   en: {
     title: 'Title',
     company: 'Company',
@@ -46,6 +69,12 @@ export const HEADERS: Record<Language, Record<JobColumn, string>> = {
     profile: 'Your profile',
     offer: 'We offer',
     other: 'Other',
+    fitScore: 'Fit %',
+    fitLevel: 'Fit',
+    keywords: 'Keywords',
+    inCv: 'In my CV',
+    missing: 'Missing in my CV',
+    aiVerdict: 'AI verdict',
   },
   de: {
     title: 'Titel',
@@ -60,6 +89,12 @@ export const HEADERS: Record<Language, Record<JobColumn, string>> = {
     profile: 'Ihr Profil',
     offer: 'Wir bieten',
     other: 'Sonstiges',
+    fitScore: 'Passung %',
+    fitLevel: 'Passung',
+    keywords: 'Schlüsselwörter',
+    inCv: 'In meinem Lebenslauf',
+    missing: 'Fehlt im Lebenslauf',
+    aiVerdict: 'KI-Fazit',
   },
 };
 
@@ -80,8 +115,11 @@ function estimateLines(text: string, width: number): number {
     .reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / Math.max(width, 1))), 0);
 }
 
-export function columnWidths(rows: string[][]): number[] {
-  return COLUMNS.map((col, i) => {
+export function columnWidths(
+  rows: string[][],
+  columns: Array<{ maxWidth: number }> = COLUMNS,
+): number[] {
+  return columns.map((col, i) => {
     const longest = rows.reduce((max, row) => {
       const firstLine = (row[i] ?? '').split('\n')[0] ?? '';
       return Math.max(max, Math.min(firstLine.length, 200));
@@ -126,14 +164,32 @@ export function exportedJob(job: JobData): JobData {
 }
 
 /** Builds the .xlsx file for the given jobs. */
-export function buildXlsx(jobs: JobData[], lang: Language = 'en'): Uint8Array {
-  const headers = COLUMNS.map((c) => HEADERS[lang][c.key]);
-  const rows = jobs
-    .map(exportedJob)
-    .map((job) => COLUMNS.map((c) => truncateCell(cleanXmlChars(job[c.key] ?? ''))));
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+export function buildXlsx(
+  jobs: JobData[],
+  lang: Language = 'en',
+  fit?: Map<string, FitCells>,
+): Uint8Array {
+  const columns: Array<{ key: ExportColumn; maxWidth: number }> = fit
+    ? [...BASE_COLUMNS, ...FIT_COLUMNS, ...TEXT_COLUMNS]
+    : COLUMNS;
+  const headers = columns.map((c) => HEADERS[lang][c.key]);
+  const cellOf = (job: JobData, key: ExportColumn): string =>
+    key in job ? (job[key as JobColumn] ?? '') : (fit?.get(job.url)?.[key as FitColumn] ?? '');
+  const exported = jobs.map(exportedJob);
+  const rows = exported.map((job) =>
+    columns.map((c) => truncateCell(cleanXmlChars(cellOf(job, c.key)))),
+  );
+  // The score is a real number so Excel sorts and filters it numerically.
+  const scoreCol = columns.findIndex((c) => c.key === 'fitScore');
+  const cells: Array<Array<string | number>> = rows.map((row, r) => {
+    const score = fit?.get(exported[r]!.url)?.score;
+    return scoreCol >= 0 && typeof score === 'number'
+      ? row.map((v, c) => (c === scoreCol ? score : v))
+      : row;
+  });
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...cells]);
 
-  const urlCol = COLUMNS.findIndex((c) => c.key === 'url');
+  const urlCol = columns.findIndex((c) => c.key === 'url');
   rows.forEach((row, r) => {
     const url = row[urlCol];
     if (url && /^https?:\/\//i.test(url)) {
@@ -143,7 +199,7 @@ export function buildXlsx(jobs: JobData[], lang: Language = 'en'): Uint8Array {
     }
   });
 
-  const widths = columnWidths([headers, ...rows]);
+  const widths = columnWidths([headers, ...rows], columns);
   ws['!cols'] = widths.map((wch) => ({ wch }));
   ws['!rows'] = [{ hpt: 20 }, ...rows.map((row) => ({ hpt: rowHeight(row, widths) }))];
 

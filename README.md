@@ -106,10 +106,24 @@ policy is [`PRIVACY.md`](PRIVACY.md). Increase `version` in `package.json` for e
   outlined in green (each item dashed) with a label such as "List with 20 items found – click to
   select". Click to select it, Esc to cancel. The largest meaningful list wins over small inner
   lists; "Smart detection" means Sanjob is confident.
-- **Match with my CV** – paste your CV/skills once in Settings. Select jobs (or use ✦ on a row)
-  and click **Match with my CV**: a ready-made prompt (instructions + CV + job data) asking for a
-  0–100 match score, matching skills, missing skills and a one-line verdict is copied to the
-  clipboard. Paste it into [claude.ai](https://claude.ai). No API key is used or stored.
+- **CV fit (local)** – upload your CV once in Settings (PDF, Word .docx or text – read inside the
+  browser) or paste it. Every job then gets a **fit score 0–100** with a label (very good / good /
+  partial / low fit), the table is sorted by fit, and "Best matches for your CV" lists the top 5.
+  Open a row to see the **keywords of the job**, which of them are **in your CV** and which are
+  **missing**. Keywords come from a skills dictionary
+  ([`src/match/skills.ts`](src/match/skills.ts) – add your own) plus words typical for the ad.
+  Profile requirements count most. Nothing leaves the browser.
+- **AI evaluation (optional)** – in Settings → AI evaluation, turn on "Rate jobs with Claude",
+  allow access to `api.anthropic.com` and enter your own Anthropic API key (stored only on this
+  device). **Rate with AI** sends your CV and the selected jobs (or the top 10 by local fit) to
+  Claude, one request per job; each job gets an AI score, a short verdict, matched/missing skills
+  and keywords, shown with an "AI" badge. Usage is billed to your Anthropic account (Claude Opus
+  5.5 by default; Sonnet 5.5 and Haiku 5.5 are cheaper). Stop at any time.
+- **Match with my CV (prompt)** – select jobs (or use ✦ on a row) and click **Match with my CV**:
+  a ready-made prompt (instructions + CV + job data) is copied to the clipboard for
+  [claude.ai](https://claude.ai) – no API key needed.
+- **Excel** – the export also has the columns _Fit %_, _Fit_, _Keywords_, _In my CV_, _Missing in
+  my CV_ and _AI verdict_ (keywords are filled even without a CV).
 - **Language** – English or German (Settings).
 
 ### Data columns
@@ -179,7 +193,8 @@ Project layout:
 | `src/content/`        | Script injected into pages, element picker                     |
 | `src/db/`             | IndexedDB (jobs, queue, history, run state)                    |
 | `src/export/`         | XLSX export                                                    |
-| `src/claude/`         | CV match prompt; provider interface for a future API mode      |
+| `src/match/`          | Local CV matching, skills dictionary, CV file reading          |
+| `src/claude/`         | CV match prompt (clipboard) and optional Claude API rating     |
 | `src/sidepanel/`      | Side panel UI                                                  |
 | `fixtures/`, `tests/` | Saved pages and unit tests                                     |
 
@@ -212,14 +227,16 @@ _Applies to the Sanjob browser extension._
 
 - **What is processed:** the content of job pages you choose to collect (job title, company,
   location, date, salary, contract type, URL, description), the URLs of collected jobs (for
-  duplicate detection), your settings, and – only if you enter it – your CV/skills text.
+  duplicate detection), your settings, and – only if you enter them – your CV/skills text and
+  your Anthropic API key.
 - **Where it is stored:** only locally in your browser (IndexedDB and `chrome.storage.local`).
   Nothing is sent to the developer or to any server. There is no telemetry, no analytics, no
   tracking and no remote code.
-- **Sharing:** none. Data leaves your browser only when you export an Excel file or copy a
-  prompt to the clipboard yourself.
-- **Claude integration:** Sanjob only copies text to your clipboard; you decide whether to paste
-  it into claude.ai. No API key is requested or stored.
+- **Sharing:** none by default. Data leaves your browser only when you export an Excel file,
+  copy a prompt to the clipboard yourself, or use the optional AI evaluation.
+- **Optional AI evaluation:** off by default. When you turn it on and click "Rate with AI", your
+  CV text and the chosen job ads are sent directly to Anthropic (`api.anthropic.com`) with your
+  own API key, under Anthropic's terms and privacy policy. Nothing goes to the developer.
 - **Permissions:** `storage` (settings), `sidePanel` (UI), `tabs` + `scripting` + `activeTab`
   (open job pages in the collection window and read them), `alarms` (keep the collection running),
   `notifications` (the "finished" message),
@@ -314,10 +331,22 @@ npm run build
 - **Liste selbst wählen** – beim Bewegen der Maus wird die Jobliste unter dem Zeiger grün
   umrandet (jeder Eintrag gestrichelt), dazu „Liste mit 20 Einträgen gefunden – klicken zum
   Auswählen“. Klick wählt aus, Esc bricht ab.
-- **Mit meinem Lebenslauf abgleichen** – Lebenslauf einmal in den Einstellungen einfügen, Jobs
-  auswählen (oder ✦ in einer Zeile) – ein fertiger Prompt mit Match-Score 0–100, passenden und
-  fehlenden Fähigkeiten und einem Fazit wird kopiert. In [claude.ai](https://claude.ai)
-  einfügen. Es wird kein API-Schlüssel verwendet oder gespeichert.
+- **Passung zum Lebenslauf (lokal)** – Lebenslauf einmal in den Einstellungen hochladen (PDF,
+  Word .docx oder Text – wird im Browser gelesen) oder einfügen. Jeder Job bekommt dann eine
+  **Passung 0–100** (passt sehr gut / gut / teilweise / wenig), die Tabelle wird danach sortiert
+  und „Beste Treffer“ zeigt die Top 5. Eine Zeile aufklappen zeigt die **Schlüsselwörter der
+  Stelle**, welche **in deinem Lebenslauf** stehen und welche **fehlen**. Nichts verlässt den
+  Browser.
+- **KI-Bewertung (optional)** – in den Einstellungen „Jobs mit Claude bewerten“ einschalten,
+  Zugriff auf `api.anthropic.com` erlauben und den eigenen Anthropic-API-Schlüssel eintragen
+  (nur auf diesem Gerät gespeichert). **Mit KI bewerten** schickt Lebenslauf und die gewählten
+  Jobs (oder die Top 10 nach lokaler Passung) an Claude; jeder Job bekommt eine KI-Bewertung, ein
+  kurzes Fazit, passende/fehlende Fähigkeiten und Schlüsselwörter. Die Kosten laufen über dein
+  Anthropic-Konto (Standard: Claude Opus 5.5; Sonnet 5.5 und Haiku 5.5 sind günstiger).
+- **Mit meinem Lebenslauf abgleichen (Prompt)** – Jobs auswählen (oder ✦ in einer Zeile) – ein
+  fertiger Prompt wird für [claude.ai](https://claude.ai) kopiert, ohne API-Schlüssel.
+- **Excel** – der Export enthält zusätzlich _Passung %_, _Passung_, _Schlüsselwörter_, _In meinem
+  Lebenslauf_, _Fehlt im Lebenslauf_ und _KI-Fazit_.
 - **Sprache** – Englisch oder Deutsch (Einstellungen).
 
 ### Spalten
@@ -362,13 +391,15 @@ Alle seitenspezifischen Selektoren stehen in **einer Datei:
 ### Datenschutzerklärung
 
 - **Verarbeitete Daten:** Inhalte der Stellenseiten, die du sammelst, die URLs gesammelter Jobs
-  (Duplikaterkennung), deine Einstellungen und – nur wenn du ihn einträgst – dein
-  Lebenslauf-Text.
+  (Duplikaterkennung), deine Einstellungen und – nur wenn du sie einträgst – dein
+  Lebenslauf-Text und dein Anthropic-API-Schlüssel.
 - **Speicherort:** ausschließlich lokal in deinem Browser (IndexedDB, `chrome.storage.local`).
   Es werden keine Daten an den Entwickler oder an Server übertragen. Keine Telemetrie, keine
   Analyse, kein Tracking, kein nachgeladener Code.
-- **Weitergabe:** keine. Daten verlassen den Browser nur, wenn du selbst eine Excel-Datei
-  exportierst oder einen Prompt in die Zwischenablage kopierst.
+- **Weitergabe:** standardmäßig keine. Daten verlassen den Browser nur, wenn du selbst eine
+  Excel-Datei exportierst, einen Prompt kopierst oder die optionale KI-Bewertung nutzt – dann
+  gehen Lebenslauf und gewählte Anzeigen mit deinem Schlüssel direkt an Anthropic
+  (`api.anthropic.com`).
 - **Berechtigungen:** `storage`, `sidePanel`, `tabs`, `scripting`, `activeTab`, `alarms`,
   `notifications`,
   Zugriff auf StepStone, Indeed, LinkedIn und XING sowie – nur nach deiner Zustimmung – auf

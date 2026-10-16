@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { JobRecord, ListingLink, QueueItem, RunState } from '../shared/types';
+import type { AiRating, JobRecord, ListingLink, QueueItem, RunState } from '../shared/types';
 import { normalizeUrl } from '../shared/url';
 
 export interface HistoryEntry {
@@ -161,6 +161,10 @@ export class Repo {
     return (await this.d.jobs.where('runId').equals(runId).toArray()).sort(
       (a, b) => a.collectedAt - b.collectedAt,
     );
+  }
+
+  async setAiRating(id: number, ai: AiRating): Promise<void> {
+    await this.d.jobs.update(id, { ai });
   }
 
   async deleteJobs(ids: number[]): Promise<void> {
