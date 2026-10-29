@@ -288,8 +288,9 @@ Datenschutzerklärung: https://github.com/Mo-Sany/sanjob/blob/main/PRIVACY.md
 | Store icon                    | `public/icons/icon128.png`              | 128×128  |
 | Screenshot 1                  | `store/screenshots/1-analysis.png`      | 1280×800 |
 | Screenshot 2                  | `store/screenshots/2-live-progress.png` | 1280×800 |
-| Screenshot 3                  | `store/screenshots/3-table.png`         | 1280×800 |
-| Screenshot 4                  | `store/screenshots/4-settings.png`      | 1280×800 |
+| Screenshot 3                  | `store/screenshots/3-cv-fit.png`        | 1280×800 |
+| Screenshot 4                  | `store/screenshots/4-tracking.png`      | 1280×800 |
+| Screenshot 5                  | `store/screenshots/5-settings.png`      | 1280×800 |
 | Small promo tile              | `store/promo-small-440x280.png`         | 440×280  |
 | Marquee promo tile (optional) | `store/promo-marquee-1400x560.png`      | 1400×560 |
 
