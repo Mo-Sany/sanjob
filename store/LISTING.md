@@ -295,6 +295,7 @@ Datenschutzerklärung: https://github.com/Mo-Sany/sanjob/blob/main/PRIVACY.md
 | Marquee promo tile (optional) | `store/promo-marquee-1400x560.png`      | 1400×560 |
 
 The screenshots use a demo job board with fictional companies.
+German, dark-mode versions for the "Deutsch" listing are in `store/screenshots-de/` (same order).
 
 ## Privacy practices tab
 
